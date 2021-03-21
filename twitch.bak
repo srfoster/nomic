@@ -36,7 +36,6 @@
          (only-in ice-particles ice-ball-hit)
          (only-in codespells at)
          nomic/lang
-         nomic/base
          )
 
 (struct xyz (x y z))

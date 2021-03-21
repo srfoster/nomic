@@ -20,23 +20,23 @@
         command-history
 
         'actionLog
-        (map log-item->json action-log)
+        (map log-item->json (game-action-log the-game))
         
         'gameState
         (hash
          'changePlayer (embed toggle-player)
-         'watchers (map watcher->json all-watchers)
-         'players (map player->json all-players)
+         'watchers (map watcher->json (game-watchers the-game))
+         'players (map player->json (game-players the-game))
 
          #;(list (hash 'name "Stephen"
                               'manaConstructs
                               (map mana-construct->json
-                                   (filter (belongs-to "Stephen") all-mana-constructs)))
+                                   (filter (belongs-to "Stephen") (game-mana-constructs the-game))))
                         (hash 'name "Lindsey"
                               'manaConstructs
                               (map mana-construct->json
-                                   (filter (belongs-to "Lindsey") all-mana-constructs))))
-         'currentPlayer (player->json current-player)
+                                   (filter (belongs-to "Lindsey") (game-mana-constructs the-game)))))
+         'currentPlayer (player->json (game-current-player the-game))
          ;'manaConstructs
          ;(map mana-construct->json all-mana-constructs)
          )
@@ -52,7 +52,7 @@
   (hash 'name (player-name p)
         'manaConstructs
         (map mana-construct->json
-             (filter (belongs-to (player-name p)) all-mana-constructs))))
+             (filter (belongs-to (player-name p)) (game-mana-constructs the-game)))))
 
 (define (toggle-player)
   (end-turn!)

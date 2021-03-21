@@ -24,8 +24,11 @@
         
         'gameState
         (hash
+         'changePlayer (embed toggle-player)
          'watchers (map watcher->json all-watchers)
-         'players (list (hash 'name "Stephen"
+         'players (map player->json all-players)
+
+         #;(list (hash 'name "Stephen"
                               'manaConstructs
                               (map mana-construct->json
                                    (filter (belongs-to "Stephen") all-mana-constructs)))
@@ -33,7 +36,7 @@
                               'manaConstructs
                               (map mana-construct->json
                                    (filter (belongs-to "Lindsey") all-mana-constructs))))
-         'currentPlayer current-player
+         'currentPlayer (player->json current-player)
          ;'manaConstructs
          ;(map mana-construct->json all-mana-constructs)
          )
@@ -44,6 +47,16 @@
         'refresh
         (embed welcome)
         ))))
+
+(define (player->json p)
+  (hash 'name (player-name p)
+        'manaConstructs
+        (map mana-construct->json
+             (filter (belongs-to (player-name p)) all-mana-constructs))))
+
+(define (toggle-player)
+  (end-turn!)
+  (welcome))
 
 (define (watcher->json w)
   (define watcher-id (twitch-eval "" "watcher-id"))
@@ -107,7 +120,9 @@
             (hash))))]))
 
 (require (only-in codespells at))
-(require nomic/twitch)
+(require nomic/twitch
+        ; ycombinator-demos/chess
+         )
 
 (define (safe-run-spell twitch-id spell-string)
 
@@ -139,7 +154,10 @@
 (define safe-evaluator
   (call-with-trusted-sandbox-configuration
    (lambda ()
-     (make-evaluator 'nomic/twitch))))
+     (make-evaluator
+      ;'ycombinator-demos/chess
+      'nomic/twitch
+      ))))
 
 (define (twitch-eval twitch-id spell-string)
   (safe-evaluator
@@ -163,13 +181,11 @@
                  #:launch-browser? #f
                  #:stateless? #t))
 
-
 (module+ main
   (require codespells)
 
   (codespells-server-port 7998)
   (unreal-server-port 7999)
-  
+  (start-game "Stephen" "Lindsey")
   (thread start-server)
-
   )

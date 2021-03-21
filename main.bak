@@ -1,9 +1,10 @@
 #lang at-exp codespells
 
-(require "./nomic-app/controllers.rkt"
-         "./lang.rkt"
-         "./base.rkt"
-         nomic/mod-info)
+(require 
+  "./nomic-app/controllers.rkt"
+  "./lang.rkt"
+  "./base.rkt"
+  nomic/mod-info)
 
 (require-mod dev-runes)
 (require-mod fire-particles)
@@ -22,7 +23,7 @@
    (build-path (current-directory) ".." ".." "CodeSpellsWorkspace"))
   (extra-unreal-command-line-args "-WinX=50 -WinY=50 -ResX=1900 -ResY=1200 -Windowed")
 
-  (start-game! "Stephen" "Lindsey")
+  (start-game "Stephen" "Lindsey")
   (thread
    start-server)
   (once-upon-a-time
