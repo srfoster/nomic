@@ -1,0 +1,177 @@
+#lang racket
+
+
+(provide (all-defined-out))
+
+(require
+  (submod nomic/gml/base games//relations)
+  (submod nomic/gml/base VM))
+
+(define (player #:name name)
+  (thing #:name name
+         'inventory '()))
+
+(define stephen
+  (player #:name "Stephen"))
+
+(define lindsey
+  (player #:name "Lindsey"))
+  
+(define players
+  (thing #:name "Players"
+         #:value (list stephen lindsey)))
+
+(define watchers
+  (thing #:name "Watchers"
+         #:value (list)))
+
+(define (watcher-name w)
+    (name #:of w))
+
+(define (find-watcher-by-twitch-id id)
+  (findf (lambda (w)
+           (string=? id (watcher-name w)))
+         (all-watchers)))
+
+(define (all-watchers)
+  (value #:of watchers))
+
+(define (add-watcher! w)
+  (define watcher-list (all-watchers))
+  (define watcher-names-list (map watcher-name watcher-list))
+  
+  (define (already-watching? w)
+    (define w-name (name #:of w))
+    (member w-name watcher-names-list string=?))
+  
+  (when (not (already-watching? w))
+   (redescribe! watchers 'value (cons w watcher-list))))
+
+(define (has-name? n)
+  (lambda (p)
+    (string=? n (name #:of p))))
+
+(define (find-player player-name)
+  (define players (thing-named "Players" #:in the-game))
+  (findf (has-name? player-name)
+         (value #:of players)))
+
+(define (add-to-inventory player-name thing)
+  (define player (find-player player-name))
+  (redescribe! player
+               'inventory (cons thing (what-is 'inventory #:of player))))
+
+(define (nexus #:color col #:mana mana)
+  (thing #:name "Nexus"
+         'color col
+         'mana mana))
+
+(define (sevarog #:mana mana)
+  (thing #:name "Sevarog"
+         'mana mana))
+
+(define (parasite #:target target #:mana [mana 1] #:regen [regen 30])
+  (thing #:name "Parasite"
+         'target target
+         'mana mana
+         'regen regen
+         'leech (program
+                 '(let ()
+                    (define target (my 'target))
+                    (define target-mana (what-is 'mana #:of target))
+                    (define my-mana (my 'mana))
+                    
+                    (redescribe! target
+                     'mana
+                     (- target-mana (my 'regen)))
+
+                    (redescribe! (my-self)
+                     'mana
+                     (+ my-mana (my 'regen)))))))
+
+(define (disenchantment #:target target #:mana mana)
+  (thing #:name "Disenchantment"
+         'target target
+         'mana mana
+         'disenchant (program
+                      '(let ()
+                         (define target (my 'target))
+                         (define target-mana (what-is 'mana #:of target))
+                         (define my-mana (my 'mana))
+                    
+                         (redescribe! target
+                                      'mana
+                                      (- target-mana my-mana))
+                         ;sets its own mana to 0 so it gets destroyed
+                         (redescribe! (my-self)
+                                      'mana
+                                      0)
+                         ))))
+
+(define (move-to-graveyard t)
+  (redescribe! graveyard 'value (cons t (value #:of graveyard)))
+  (define player (player-controlling t))
+  (redescribe! player 'inventory (remove t (inventory #:of player))))
+
+(define (inventory #:of p)
+  (what-is 'inventory #:of p))
+
+(define (player-controlling t)
+  (define players (value #:of players))
+  (findf (lambda (p)
+           (in-player-inventory? t p)) players))
+
+(define (in-player-inventory? t p)
+  (member t (inventory #:of p)))
+
+(define (is-dead? t)
+  (< (what-is 'mana #:of t) 0))
+
+(define graveyard (thing #:name "Graveyard"
+                   'value '()))
+
+
+(provide is-dead? move-to-graveyard)
+(define reaper
+  (thing #:name "Reaper"
+         'reap (program #:lang 'nomic/nomic-app/new-controllers
+                '(let ()
+                   (define dead-things
+                     (filter is-dead?
+                             (all-things-in-play)))
+                   (map move-to-graveyard dead-things)))))
+
+(define (all-things-in-play)
+  (define ps (value #:of players))
+  (flatten
+   (map (lambda (p)
+         (inventory #:of p))
+       ps)))
+
+(define (find-by-name-in-inventory name player-name)
+  (define player (find-player player-name))
+  (define inventory (what-is 'inventory #:of player))
+  (findf (has-name? name)
+   inventory))
+
+(set-the-game!
+ (put-in (new-game)
+         reaper
+         graveyard
+         players
+         watchers
+         ))
+
+
+;;;;
+
+(add-to-inventory "Lindsey" (nexus #:mana 100 #:color 'green))
+(add-to-inventory "Stephen"
+                  (parasite #:target (find-by-name-in-inventory "Nexus" "Lindsey")
+                            #:mana 1
+                            #:regen 300
+                            ))
+(run 'leech #:of (find-by-name-in-inventory "Parasite" "Stephen"))
+;(run 'reap #:of reaper)
+
+;;;;

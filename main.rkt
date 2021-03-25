@@ -3,7 +3,8 @@
 (require "./nomic-app/controllers.rkt"
          "./lang.rkt"
          "./base.rkt"
-         nomic/mod-info)
+         nomic/mod-info
+         nomic/spells)
 
 (require-mod dev-runes)
 (require-mod fire-particles)

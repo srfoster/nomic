@@ -23,25 +23,48 @@
 |#
 
 (module game/things racket/base
-  (provide (struct-out thing)
+  (provide (except-out (struct-out thing) thing)
+           
            game?
            take-out
            put-in
            new-game
-           things-in)
+           things-in
+           id->thing
+           (rename-out [get-all-things all-things]
+                       [new-thing thing]))
 
   (require racket/contract)
 
-  (struct thing ())
+  (define next-id 0)
+  (struct thing (id))
   (struct game (things) #:transparent)
 
+
+  (define all-things '())
+  (define (get-all-things) all-things)
+
+  (define (id->thing i)
+    ;Hmmm.  Should keep a table
+    ;(displayln i)
+    (findf (lambda (t)
+              (= (thing-id t) i))
+            all-things))
+  
   (define/contract (new-thing)
     (-> thing?)
-    (thing))
+    (define ret (thing next-id))
+
+    (set! next-id (add1 next-id))
+
+    (set! all-things (cons ret all-things))
+    
+    ret)
 
   (define/contract (things-in g)
     (-> game? (listof thing?))
     (game-things g))
+
 
   (define/contract (new-game)
     (-> game?)
@@ -80,10 +103,13 @@
 
 (module game/things/descriptions racket/base
   (provide thing what-is
+           thing-named
            print-game
            describe-things-in
            redescribe!
            describe-thing
+           thingify
+           parent-of
            (except-out
             (all-from-out (submod ".." game/things))
             lower:thing))
@@ -95,15 +121,42 @@
     racket/hash )
 
   (define descriptions (hash))
+  (define parents (hash))
+  
+  (define (parent-of t)
+    (hash-ref parents t))
+
+  (define (thingify td)
+    (define t (lower:thing))
+    (set! descriptions (hash-set descriptions
+                                 t
+                                 (hash)))
+    (for ([k (hash-keys td)])
+      (redescribe! t k (hash-ref td k)))
+    t)
   
   (define (thing . attrs/vals)
     (define ret (lower:thing))
+
+    (for ([i (length attrs/vals)])
+      (when (odd? i)
+        (define child (list-ref attrs/vals i))
+
+        (when (thing? child)
+          (set! parents (hash-set parents
+                                  child
+                                  ret)))))
+    
     (set! descriptions (hash-set descriptions
                                  ret
                                  (apply hash attrs/vals)))
     ret)
 
   (define (redescribe! t k v)
+    (when (thing? v)
+          (set! parents (hash-set parents
+                                  k
+                                  t)))
     (set! descriptions
           (hash-set descriptions
                     t
@@ -117,6 +170,13 @@
     (when (not the-thing) (raise "Must supply #:for or #:of to (what-is ...)"))
     (hash-ref (hash-ref descriptions the-thing) k fallback))
 
+  
+  (define (thing-named s #:in g)
+    (findf (lambda (t)
+             (string=? s
+                       (what-is 'name #:of t)))
+           (things-in g)))
+
   (define (print-game g)
     (for ([t (things-in g)])
       (displayln (hash-ref descriptions t))))
@@ -126,7 +186,9 @@
       (hash-ref descriptions t)))
 
   (define (describe-thing t)
-    (hash-ref descriptions t))
+    (hash-set (hash-ref descriptions t)
+              'id
+              (thing-id t)))
 
   (module+ test
     (require rackunit racket/list)
@@ -214,7 +276,7 @@
 
 
 (module game/things/descriptions/names/types/values racket/base
-  (provide thing value
+  (provide thing value value-of
            (except-out
             (all-from-out (submod ".." game/things/descriptions/names/types))
             lower:thing))
@@ -236,6 +298,9 @@
 
   (define (value #:of t)
     (what-is 'value #:of t))
+
+  (define (value-of t)
+    (value #:of t))
 
   (module+ test
     (require rackunit racket/list)
@@ -259,7 +324,8 @@
 
 (module games//relations racket/base
   (provide relation related?
-           
+           find-relations
+           relation-from relation-to relation-name
            (all-from-out (submod ".." game/things/descriptions/names/types/values)))
   
   (require
@@ -269,7 +335,8 @@
     racket/contract)
   
   (require
-    (submod ".." game/things/descriptions/names/types/values))
+    (submod ".." game/things/descriptions/names/types/values)
+    racket/list)
 
   (define (relation from name to)
     (define ret
@@ -279,13 +346,27 @@
 
     ret)
 
-  (define/contract (related? g from name to)
-    (-> game? thing? symbol? thing? any/c)
+  (define/contract (related? from name to)
+    (-> thing? symbol? thing? any/c)
     (findf
      (lambda (t)
        (equal? (value #:of t)
                (list from name to)))
-     (things-in g)))
+     (all-things)))
+
+  (define relation-to (compose third value-of))
+  (define relation-from (compose first value-of))
+  (define relation-name (compose second value-of))
+  
+  (define/contract (find-relations from name)
+    (-> thing? symbol? (listof thing?))
+    (filter
+     (lambda (t)
+       (and
+        (eq? 'Relation (type #:of t))
+        (equal? from (first (value #:of t)))
+        (equal? name (second (value #:of t)))))
+     (all-things)))
 
   (module+ test
     (require rackunit racket/list)
@@ -311,7 +392,7 @@
                       d1:part-of:board
                       light-queen-location))
 
-    (check-not-false (related? g d1 'part-of board))))
+    (check-not-false (related? d1 'part-of board))))
 
 (require (submod "." games//relations test))
 
@@ -385,14 +466,28 @@
 (require (submod "." MtG test))
 
 (module VM racket/base
-  (provide tick tick-thing my-output)
+  (provide tick tick-thing my-output run my program program?
+           my-self
+           run-program)
   
   (require
-    (submod ".." games//relations))
+    (submod ".." games//relations)
+    (only-in racket/format ~v))
 
   (define-namespace-anchor a)
   (define ns (namespace-anchor->namespace a))
 
+  (define (program code #:lang [lang #f])
+    (thing #:name "Program"
+           #:type 'Program
+           #:value (~v code)
+           'lang lang))
+
+  (define (program? t)
+    (eq? 'Program (type #:of t)))
+  
+  (define (my k)
+    (what-is k #:of (my-self)))
 
   (define my-output (make-parameter #f))
 
@@ -407,13 +502,72 @@
 
   (define (tick-thing p)
     (parameterize ([my-output (what-is 'output #:of p)])
-      (define new-v (eval (value #:of p)
+      (define new-v (eval (read (open-input-string
+                                 (substring (value #:of p) 1 ) ))
                           ns))
       (redescribe! p 'output
                      new-v)))
   
   (define (output #:of t)
     (what-is 'output #:of t))
+
+  (define my-self (make-parameter #f))
+
+  (define (run-program p) ;Must be attatched to a parent thing
+    (define code
+      (value #:of p))
+
+    (define lang (what-is 'lang #:of p #:fallback #f))
+      
+    (parameterize ([my-self (parent-of p)])
+      (define to-open (substring code 1))
+
+      (when lang
+        (dynamic-require lang #f))
+      (eval `(let ()
+               ,(when lang `(local-require ,lang))
+               ,(read (open-input-string to-open)))
+            ns)))
+
+  (define (run k #:of t)
+    (define b (what-is k #:of t
+                       #:fallback #f))
+ 
+    (when b
+      (define code
+        (if (thing? b)
+          (value #:of b) ;Should check type is 'Program?
+          b))
+
+      (define lang (and
+                    (thing? b)
+                    (what-is 'lang #:of b #:fallback #f)))
+      
+      (parameterize ([my-self t])
+        (define to-open (substring code 1))
+
+        ;;(displayln t)
+
+        ;(writeln to-open)
+        ;(writeln lang)
+
+        ;(displayln (dynamic-require lang 'action:change-mana))
+
+        ;(displayln (eval '(action:change-mana #:of 'a #:by #'b)
+        ;                 (module->namespace '(submod nomic/gml/base CS))))
+
+        ;(displayln (read (open-input-string to-open)))
+        
+        (when lang
+          (dynamic-require lang #f))
+        (eval `(let ()
+                 ,(when lang `(local-require ,lang))
+                 ,(read (open-input-string to-open)))
+              ns
+              #;
+              (if lang
+                  (module->namespace lang)
+                  ns)))))
 
   
   (module+ test
@@ -425,7 +579,7 @@
     (define program
       (thing #:name "Program"
              #:type 'Program
-             #:value '(+ 1 1)
+             #:value "'(+ 1 1)"
              'output (void)
              ))
 
@@ -444,7 +598,7 @@
     (define program2
       (thing #:name "Program"
              #:type 'Program
-             #:value '(+ 5 (my-output))
+             #:value "'(+ 5 (my-output))"
              'output 5
              ))
 
@@ -461,8 +615,7 @@
     (define program3
       (thing #:name "Program"
              #:type 'Program
-             #:value '(put-in (my-output)
-                              (thing #:name "HI"))
+             #:value "'(put-in (my-output) (thing #:name \"HI\"))"
              'output (new-game)
              ))
 
@@ -493,24 +646,13 @@
 
 
 (module CS racket/base
+  (provide action:change-mana do-action
+           (all-from-out (submod ".." games//relations)))
+  
   (require
     (submod ".." games//relations)
     (submod ".." VM))
 
-  (define-namespace-anchor a)
-  (define ns (namespace-anchor->namespace a))
-
-  (define my-target (make-parameter #f))
-  (define my-self (make-parameter #f))
-
-  (define (run k #:of t)
-    (define b (what-is k #:of t
-                       #:fallback #f))
- 
-    (when b
-      (parameterize ([my-target (what-is 'target #:of t)]
-                     [my-self t])
-        (eval b ns))))
 
   (define (mana #:of t)
     (what-is 'mana #:of t))
@@ -536,8 +678,6 @@
       [else (error "Not an allowed action: " e)])
     )
 
-  (define (my k)
-    (what-is k #:of (my-self)))
 
 
 
@@ -561,9 +701,13 @@
                                  'regen 25
                                  'owner stephen
                                  'on-turn-begin
-                                 '(action:change-mana
+                                 (program
+                                  #:lang '(submod nomic/gml/base CS)
+                                  '(displayln (my-self))
+                                  #;
+                                  '(action:change-mana
                                    #:of (my-self)
-                                   #:by (my 'regen))))
+                                   #:by (my 'regen)))))
 
     (define lindsey:nexus (thing #:name "Lindsey's Nexus"
                                  #:type 'Permanent
@@ -571,9 +715,11 @@
                                  'regen 25
                                  'owner lindsey
                                  'on-turn-begin
-                                 '(action:change-mana
+                                 (program
+                                  #:lang '(submod nomic/gml/base CS)
+                                  '(action:change-mana
                                    #:of (my-self)
-                                   #:by (my 'regen))))
+                                   #:by (my 'regen)))))
 
     (define lindsey:sevarog (thing #:name "Lindsey's Sevarog"
                                    #:type 'Creature
@@ -585,25 +731,30 @@
                                     'regen 33
                                     'target lindsey:sevarog
                                     'on-turn-begin
-                                    '(list
-                                      (action:change-mana
-                                       #:of (my-target)
-                                       #:by (- (my 'regen)))
-                                      (action:change-mana
-                                       #:of (my-self)
-                                       #:by (my 'regen)))))
+                                    (program
+                                     #:lang '(submod nomic/gml/base CS)
+                                     
+                                     '(list
+                                       (action:change-mana
+                                        #:of (my 'target)
+                                        #:by (- (my 'regen)))
+                                       (action:change-mana
+                                        #:of (my-self)
+                                        #:by (my 'regen))))))
 
     (define action-queue (thing #:name "Action Queue"
                                 #:type 'Queue
                                 'queue '()
                                 
                                 'flush
-                                '(let ()
-                                   (map do-action
-                                        (what-is 'queue
-                                                 #:of (my-self)))
-                                   (redescribe! (my-self) 'queue '())
-                                   )))
+                                (program 
+                                 #:lang '(submod nomic/gml/base CS)
+                                 '(let ()
+                                    (map do-action
+                                         (what-is 'queue
+                                                  #:of (my-self)))
+                                    (redescribe! (my-self) 'queue '())
+                                    ))))
 
     (define g
       (put-in (new-game)
@@ -617,11 +768,17 @@
               action-queue))
 
     ;TODO: Move extra-game logic like this into the game...
+
+    
     (define as
       (filter (not/c void?)
               (flatten
-               (map (lambda (t) (run 'on-turn-begin #:of t)) (things-in g)))))
+               (map (lambda (t)
+                      (displayln (what-is 'name #:of t))
+                      (run 'on-turn-begin #:of t))
+                    (things-in g)))))
 
+    
     (redescribe! action-queue
                  'queue
                  as)
@@ -676,8 +833,6 @@
 
 
 (require (submod "." CS test))
-
-
 
 
 

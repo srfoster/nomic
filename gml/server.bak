@@ -1,0 +1,218 @@
+#lang at-exp web-server
+
+(provide start-server)
+
+(require racket/sandbox
+         racket-react/server
+         json
+         (submod nomic/gml/base games//relations)
+         (submod nomic/gml/base VM))
+
+(define-namespace-anchor a)
+(define ns (namespace-anchor->namespace a))
+
+(define the-game
+  (new-game))
+
+(define (set-the-game! g)
+  (set! the-game g))
+
+(define (x->json x)
+  (cond [(symbol? x)  (~a x)]
+        [(number? x)  x]
+        [(string? x)  x]
+        [(boolean? x) x]
+        [(hash? x)
+         (let ()
+           (define new-x (hash))
+           (for ([k (hash-keys x)])
+             (set! new-x (hash-set new-x k (x->json (hash-ref x k)))))
+           new-x)]
+        [(void? x)  "null"]
+        [(thing? x) (cond
+                      [(program? x)
+                       (hash 'name (what-is 'name #:of x)
+                             'type "Program"
+                             'value (~v (value #:of x)))
+                       ]
+                      [else (thing->json x)])]
+        [(list? x) (map x->json x)]
+        [(game? x) (game->json x)]
+        [else (~a x)]))
+
+(define (thing->json t)
+  (define h (describe-thing t))
+  (define ret (hash))
+
+  (for ([k (hash-keys h)])
+    (set! ret (hash-set ret k (x->json (hash-ref h k)))))
+  
+  ret)
+
+(define (game->json g)
+  (hash
+   'type "game"
+   'things (map thing->json (things-in g))))
+
+(define (run-script)
+ 
+  (define script (arg 'script))
+
+  (define evaluation
+    (eval (read (open-input-string script))
+          ns))
+ 
+  (welcome)
+  )
+
+(define (welcome)
+  (with-embeds
+    (response/json/cors
+      (hash
+        'type "game-state"
+
+        'refresh
+        (embed welcome)
+
+        'gameState
+        (game->json the-game)
+
+        'runScript
+        (embed run-script)
+        ))))
+
+(define-values (do-routing url)
+  (dispatch-rules
+    [("top")
+     (start
+      (lambda (r)
+        (welcome)))]
+    [("twitch-spell")
+     (lambda (r)
+       (safe-run-spell (extract-twitch-id r) (extract-spell r))
+       (with-embeds
+           (response/json/cors
+            (hash))))]))
+
+(define (thingify td)
+  (define t (thing #:name "Dummy"))
+  (for ([k (hash-keys td)])
+    (redescribe! t k (hash-ref td k)))
+  t)
+
+(define (safe-run-spell twitch-id spell-string)
+  (define thing-description
+    (twitch-eval twitch-id spell-string))
+
+  (cond
+    [(eq? 'Watcher (hash-ref thing-description 'type))
+     (add-watcher! ;(thing #:name twitch-id #:type 'Watcher)
+      (thingify thing-description))]
+    [(eq? 'WatcherDescribe (hash-ref thing-description 'type))
+     (redescribe! (find-watcher-by-twitch-id twitch-id)
+                  (hash-ref thing-description 'key)
+                  (hash-ref thing-description 'value))]
+    [else
+     (error "What was that???")]))
+
+(define (twitch-eval twitch-id spell-string)
+  (safe-evaluator
+   `(with-twitch-id ,twitch-id
+      ,(read (open-input-string spell-string)))))
+
+(require nomic/new-twitch)
+(define safe-evaluator
+  (call-with-trusted-sandbox-configuration
+   (lambda ()
+     (make-evaluator
+      'nomic/new-twitch
+      ))))
+
+(define (extract-spell r)
+  (extract-binding/single
+   'spell
+   (request-bindings r)))
+
+(define (extract-twitch-id r)
+  (extract-binding/single
+   'twitch-id
+   (request-bindings r)))
+
+(define (start-server)
+  (serve/servlet do-routing
+                 #:port 8081
+                 #:servlet-regexp #rx""
+                 #:launch-browser? #f
+                 #:stateless? #t))
+
+(define you
+  (thing #:name "You"))
+
+(define me
+  (thing #:name "Me"))
+  
+(define players
+  (thing #:name "Players"
+         #:value (list you
+                       me)))
+
+(define watchers
+  (thing #:name "Watchers"
+         #:value (list)))
+
+(define (watcher-name w)
+    (name #:of w))
+
+(define (find-watcher-by-twitch-id id)
+  (findf (lambda (w)
+           (string=? id (watcher-name w)))
+         (all-watchers)))
+
+(define (all-watchers)
+  (value #:of watchers))
+
+(define (add-watcher! w)
+  (define watcher-list (all-watchers))
+  (define watcher-names-list (map watcher-name watcher-list))
+  
+  (define (already-watching? w)
+    (define w-name (name #:of w))
+    (member w-name watcher-names-list string=?))
+  
+  (when (not (already-watching? w))
+   (redescribe! watchers 'value (cons w watcher-list))))
+  
+(set-the-game!
+ (put-in (new-game)
+         players
+         watchers
+         ))
+
+(describe-things-in the-game)
+;(require codespells)
+;(codespells-server-port 7998)
+;(unreal-server-port 7999)
+ 
+(thread start-server)
+
+(module+ main
+  
+  
+ #;
+  (define laurond (thing #:name "Laurond"
+                         'mana 100
+                         'change-mana
+                         (program
+                          '(redescribe!
+                            (my-self)
+                            'mana
+                            (+ 1 (my 'mana))))))
+
+  #;
+  (run 'change-mana 
+     #:of 
+     (last 
+      (value #:of 
+             (thing-named "Players" 
+                          #:in the-game))))
+  )

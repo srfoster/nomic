@@ -1,0 +1,70 @@
+#lang at-exp web-server
+
+(provide start-server)
+
+(require racket/sandbox
+         racket-react/server
+         json
+         (submod nomic/gml/base games//relations))
+
+(define the-game
+  (new-game))
+
+(define (set-the-game! g)
+  (set! the-game g))
+
+(define (game->json g)
+  (hash
+   'type "game"))
+
+(define (welcome)
+  (with-embeds
+    (response/json/cors
+      (hash
+        'type "game-state"
+
+        'refresh
+        (embed welcome)
+
+        'the-game
+        (game->json the-game)
+        ))))
+
+(define-values (do-routing url)
+  (dispatch-rules
+    [("top")
+     (start
+      (lambda (r)
+        (welcome)))]
+    [("twitch-spell")
+     (lambda (r)
+       (with-embeds
+           (response/json/cors
+            (hash))))]))
+
+(define (start-server)
+  (serve/servlet do-routing
+                 #:port 8081
+                 #:servlet-regexp #rx""
+                 #:launch-browser? #f
+                 #:stateless? #t))
+
+(module+ main
+  (require codespells)
+
+  (define you
+    (thing #:name "You"))
+
+  (define me
+    (thing #:name "Me"))
+
+  (set-the-game!
+        (put-in (new-game)
+                you
+                me))
+
+  (codespells-server-port 7998)
+  (unreal-server-port 7999)
+ 
+  (thread start-server)
+  )

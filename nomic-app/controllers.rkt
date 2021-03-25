@@ -5,6 +5,7 @@
 (require racket/sandbox
          racket-react/server
          codespells-server/unreal-js/unreal-client
+         nomic/spells
          json
          "../lang.rkt")
 
@@ -27,18 +28,7 @@
          'changePlayer (embed toggle-player)
          'watchers (map watcher->json (game-watchers the-game))
          'players (map player->json (game-players the-game))
-
-         #;(list (hash 'name "Stephen"
-                              'manaConstructs
-                              (map mana-construct->json
-                                   (filter (belongs-to "Stephen") (game-mana-constructs the-game))))
-                        (hash 'name "Lindsey"
-                              'manaConstructs
-                              (map mana-construct->json
-                                   (filter (belongs-to "Lindsey") (game-mana-constructs the-game)))))
          'currentPlayer (player->json (game-current-player the-game))
-         ;'manaConstructs
-         ;(map mana-construct->json all-mana-constructs)
          )
 
         'runScript
