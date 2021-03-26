@@ -7,20 +7,8 @@
   (submod nomic/gml/base games//relations)
   (submod nomic/gml/base VM))
 
-(define (player #:name name)
-  (thing #:name name
-         'inventory '()))
 
-(define lindsey
-  (player #:name "Lindsey"))
-
-(define stephen
-  (player #:name "Stephen"))
-  
-(define players
-  (thing #:name "Players"
-         #:value (list stephen lindsey)))
-
+;;; STATE CHECKER
 (define state-checker
   (thing #:name "State Checker"
          'state-check (program
@@ -30,6 +18,7 @@
                                  (run 'state-check #:of t))
                                (all-things-in-play))))))
 
+;;; WATCHERS
 (define watchers
   (thing #:name "Watchers"
          #:value (list)))
@@ -56,9 +45,49 @@
   (when (not (already-watching? w))
    (redescribe! watchers 'value (cons w watcher-list))))
 
+
+;;;UTIL
 (define (has-name? n)
   (lambda (p)
     (string=? n (name #:of p))))
+
+(define (find-by-name-in-inventory name player-name)
+  (define player (find-player player-name))
+  (define inventory (what-is 'inventory #:of player))
+  (findf (has-name? name)
+   inventory))
+
+
+;;;PLAYERS
+(define (player #:name name)
+  (thing #:name name
+         'inventory '()))
+
+(define lindsey
+  (player #:name "Lindsey"))
+
+(define stephen
+  (player #:name "Stephen"))
+  
+(define players
+  (thing #:name "Players"
+         #:value (list stephen lindsey)
+         'current-player 0))
+
+(define (name->player n)
+  (player #:name n))
+
+(define (next-player)
+  (redescribe! players 'current-player
+               (modulo
+                (add1 (what-is 'current-player #:of players))
+                (length (value #:of players)))))
+
+(define (current-player)
+  (list-ref (value #:of players) (what-is 'current-player #:of players)))
+
+(define (current-player-name)
+  (name #:of (current-player)))
 
 (define (find-player player-name)
   (define players (thing-named "Players" #:in the-game))
@@ -70,25 +99,24 @@
   (redescribe! player
                'inventory (cons thing (what-is 'inventory #:of player))))
 
-(define (cast-spell player-name t)
-  (add-to-inventory player-name t)
-  (deplete-nexus-mana player-name (what-is 'mana #:of t)))
 
-(define (nexus-for-player-name player-name)
-  (define inventory (what-is 'inventory #:of (find-player player-name)))
-  (findf (has-name? "Nexus") inventory))
 
 (define (deplete-mana t mana)
   (redescribe! t 'mana (- (what-is 'mana #:of t) mana)))
+
+;;; NEXUS
+(define (nexus-for-player-name player-name)
+  (define inventory (what-is 'inventory #:of (find-player player-name)))
+  (findf (has-name? "Nexus") inventory))
 
 (define (deplete-nexus-mana player-name mana)
   (define nexus (nexus-for-player-name player-name))
   (deplete-mana nexus mana))
 
 (define (nexus #:color col #:mana mana)
-  (thing #:name "Nexus"
-         'color col
-         'mana mana))
+    (thing #:name "Nexus"
+           'color col
+           'mana mana))
 
 (define (sevarog #:mana mana)
   (thing #:name "Sevarog"
@@ -192,11 +220,6 @@
          (inventory #:of p))
        ps)))
 
-(define (find-by-name-in-inventory name player-name)
-  (define player (find-player player-name))
-  (define inventory (what-is 'inventory #:of player))
-  (findf (has-name? name)
-   inventory))
 
 (define the-game
  (put-in (new-game)
@@ -210,40 +233,32 @@
 (define (mana-of t)
   (what-is 'mana #:of t))
 
-(define (sample-game) 
-  (local-require rackunit)
-  (define lindsey-nexus (nexus #:mana 100 #:color 'green))
-  (define stephen-nexus (nexus #:mana 100 #:color 'pink))
-  (add-to-inventory "Lindsey" lindsey-nexus)
-  (add-to-inventory "Stephen" stephen-nexus)
-  
-  (cast-spell "Lindsey"
-              (sevarog  #:mana 1))
-  (check-eq? (mana-of lindsey-nexus) 99)
-  (check-eq? (length (value #:of graveyard)) 0)
-  
-  (cast-spell "Stephen"
-              (parasite #:target (find-by-name-in-inventory "Sevarog" "Lindsey")
-                        #:mana 1
-                        #:regen 200 ;super strong for testing purposes
-                        ))
-  (check-eq? (mana-of stephen-nexus) 99)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(module+ moves
+  (provide cast-spell
+           place-nexus
+           end-turn!
+           start-game-with-players
+           current-player-name
+           )
 
-  (define my-disenchantment
-    (disenchantment #:mana 50
-                    #:target (find-by-name-in-inventory "Parasite" "Stephen")))
-  (cast-spell "Lindsey"
-              my-disenchantment)
-  (check-eq? (mana-of lindsey-nexus) 49)
-  (run 'disenchant #:of (find-by-name-in-inventory "Disenchantment" "Lindsey"))
-  (check-pred is-dead? (what-is 'target #:of my-disenchantment)
-              "The target of my disenchantment should be dead!")
+  (define (start-game-with-players . names)
+    (redescribe! players 'value (map name->player names)))
+  
+  (define (place-nexus #:mana mana #:color color)
+    (when (> mana 100) ;This is where you would enforce nexus properties
+      (error "You can't have a nexus with more than 100 mana! Cheater!"))
+    (add-to-inventory (current-player-name) (nexus #:mana mana #:color color)))
+  
+  (define (cast-spell t)
+    (add-to-inventory (current-player-name) t)
+    (deplete-nexus-mana (current-player-name) (what-is 'mana #:of t)))
 
-  (void (run 'reap #:of reaper))
-  (check-eq? (length (value #:of graveyard)) 1)
-  (void (run 'state-check #:of state-checker))
-  (check-eq? (length (value #:of graveyard)) 2)
+  (define (end-turn!)
+    (next-player))
   )
+
+
 
 ;(run 'reap #:of reaper)
 
@@ -251,7 +266,6 @@
   ; Or any children?
 
 (module+ main
-  (sample-game)
   (require nomic/gml/server
            racket/sandbox
            web-server/http/bindings)

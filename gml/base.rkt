@@ -157,11 +157,24 @@
           (set! parents (hash-set parents
                                   k
                                   t)))
+
+
+    ;The tests show this to be correct, but it is getting hard to follow.
+    ;  Refactor to show correctness
     (set! descriptions
           (hash-set descriptions
                     t
-                    (hash-set (hash-ref descriptions t)
-                              k v))))
+                    (if (procedure? v)
+                        (hash-set (hash-ref descriptions t)
+                                  k (v (hash-ref
+                                        (hash-ref descriptions t)
+                                        k)))
+                        (hash-set (hash-ref descriptions t)
+                                  k v))
+
+                    ))
+
+    )
 
   (define (what-is k #:for [for #f]
                    #:of [of #f]
@@ -204,6 +217,15 @@
     (check-equal?
      (what-is 'name #:of (first (things-in g1)))
      "Light Queen")
+
+    ;Since things can only be described by primitive values (not functions),
+    ;  we can pass in a function and it can be used to update the current value
+    
+    (redescribe! queen 'name string-downcase)
+
+    (check-equal?
+     (what-is 'name #:of (first (things-in g1)))
+     "light queen")
     
     ))
 
