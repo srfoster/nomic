@@ -419,6 +419,215 @@
 (require (submod "." games//relations test))
 
 
+
+(module games//graphs racket/base
+  (provide (all-from-out (submod ".." game/things/descriptions/names/types/values)))
+  
+  (require
+    (except-in (submod ".." game/things/descriptions/names/types/values) thing)
+    (rename-in (submod ".." game/things/descriptions/names/types/values)
+               [thing lower:thing])
+    racket/contract
+    racket/function
+    graph)
+  
+  (require
+    (submod ".." game/things/descriptions/names/types/values)
+    racket/list)
+
+  (define (new-thing-graph . vs)
+    (define g (weighted-graph/directed '()))
+    
+    (map (curry add-vertex! g) vs)
+
+    g)
+
+  (define (tile g x y)
+    ;Not very efficient.  Cache this value!
+    (findf 
+      (lambda (t)
+	(and
+	  (eq? x (what-is 'grid-x #:of t)) 
+	  (eq? y (what-is 'grid-y #:of t)) )) 
+      (get-vertices g)))
+
+  (define (grid-graph 
+	    #:constructor [constructor (curry thing #:name "Tile")]
+	    w h)
+    (define vs
+      (for/list ([wi (range w)])
+	      (for/list ([hi (range h)])
+			(constructor 
+			  'grid-x wi	
+			  'grid-y hi))))
+
+    (define g (apply new-thing-graph (flatten vs)))
+
+    (for/list ([wi (range w)])
+	      (for/list ([hi (range h)])
+			(define current 
+			  (list-ref (list-ref vs hi) wi))
+
+			(define north
+			  (with-handlers ([exn:fail? (thunk* #f)])
+			    (list-ref (list-ref vs (sub1 hi)) wi)))
+			(define south
+			  (with-handlers ([exn:fail? (thunk* #f)])
+			    (list-ref (list-ref vs (add1 hi)) wi)))
+			(define east
+			  (with-handlers ([exn:fail? (thunk* #f)])
+			    (list-ref (list-ref vs hi) (add1 wi))))
+			(define west
+			  (with-handlers ([exn:fail? (thunk* #f)])
+			    (list-ref (list-ref vs hi) (sub1 wi))))
+			(define north-east
+			  (with-handlers ([exn:fail? (thunk* #f)])
+			    (list-ref (list-ref vs (sub1 hi)) (add1 wi))))
+			(define south-east
+			  (with-handlers ([exn:fail? (thunk* #f)])
+			    (list-ref (list-ref vs (sub1 hi)) (add1 wi))))
+			(define south-west
+			  (with-handlers ([exn:fail? (thunk* #f)])
+			    (list-ref (list-ref vs (add1 hi)) (sub1 wi))))
+			(define north-west
+			  (with-handlers ([exn:fail? (thunk* #f)])
+			    (list-ref (list-ref vs (sub1 hi)) (sub1 wi))))
+
+
+			(and north
+			     (add-edge! g current north))
+			(and south
+			     (add-edge! g current south))
+			(and east
+			     (add-edge! g current east))
+			(and west
+			     (add-edge! g current west))
+			(and north-east
+			     (add-edge! g current north-east))
+			(and south-east
+			     (add-edge! g current south-east))
+			(and south-west
+			     (add-edge! g current south-west))
+			(and north-west
+			     (add-edge! g current north-west))))
+
+    g)
+
+  (define (link! g v1 v2)
+    (add-edge! g v1 v2))
+
+  (define (path g v1 v2)
+    (fewest-vertices-path g v1 v2))
+
+
+  (module+ 
+    test
+    (require rackunit)
+
+    ;TODO: Convenience functions for grids
+
+    (define (house #:name n)
+      (thing #:name n 'people '()))
+
+    (define house1 (house #:name "House 1"))
+    (define house2 (house #:name "House 2"))
+    (define house3 (house #:name "House 3"))
+    (define house4 (house #:name "House 4"))
+    (define house5 (house #:name "House 5"))
+
+    (define g (new-thing-graph house1 house2 house3 house4 house5))
+
+    (link! g house1 house2)
+    (link! g house1 house3)
+    (link! g house1 house4)
+    (link! g house4 house5)
+
+    (check-eq? 4 (length (path g house2 house5))
+	       "There should be 2 houses between house 2 and house 5: total 4 houses")
+
+    (define (all-houses)
+      (get-vertices g))
+
+    (define (next-house source-h dest-h)
+      (define the-path
+	(path g source-h dest-h))
+
+      (cond 
+	[(not the-path) #f]
+	[(< 1 (length the-path)) 
+	 (second the-path)]
+	[(= 1 (length the-path)) 
+	 (first the-path)]))
+
+
+    ;TODO: make "enterable" things...
+
+    (define (exit-all p)
+      (for ([h (all-houses)])
+	   (exit-house p h)))
+
+    (define (exit-house p h)
+      (redescribe! h 'people
+		   (curry remove p)))
+
+    (define (enter-house p h)
+      (exit-all p)
+      (redescribe! h 'people
+		   (curry cons p)))
+
+    (define (current-house p)
+      (findf
+        (lambda (h)
+	  (member p (what-is 'people #:of h)))
+	(all-houses)))
+
+    (define (move-toward p h)
+      (define nh (next-house (current-house p) h))
+      (enter-house p nh))
+
+    
+    (define dude (thing #:name "Dude"))
+    (enter-house dude house2)
+
+    (check-eq? 1 (length (what-is 'people #:of house2)))
+
+    (move-toward dude house5)
+
+    (check-eq? 0 (length (what-is 'people #:of house2)))
+    (check-eq? 1 (length (what-is 'people #:of house1)))
+
+    (move-toward dude house5)
+    
+    (check-eq? 0 (length (what-is 'people #:of house1)))
+    (check-eq? 1 (length (what-is 'people #:of house4)))
+
+    (move-toward dude house5)
+
+    (check-eq? 0 (length (what-is 'people #:of house4)))
+    (check-eq? 1 (length (what-is 'people #:of house5)))
+
+    (move-toward dude house5)
+    (check-eq? 1 (length (what-is 'people #:of house5)))
+
+
+    ;Test for grid graphs, e.g. chess
+
+    (define new-g
+      (grid-graph 5 5))
+
+    (check-eq?
+      5
+      (length
+	(path new-g
+	      (tile new-g 0 0)
+	      (tile new-g 3 4)
+	      )))
+
+    ))
+
+(require (submod "." games//graphs test))
+
+
 #;
 (module chess racket/base
   (module+ test
@@ -660,7 +869,7 @@
                   2)
 
     ;(print-game g3)
-    (describe-things-in (output #:of (first (things-in g3))))
+    ;(describe-things-in (output #:of (first (things-in g3))))
     )
   )
 
@@ -796,7 +1005,6 @@
       (filter (not/c void?)
               (flatten
                (map (lambda (t)
-                      (displayln (what-is 'name #:of t))
                       (run 'on-turn-begin #:of t))
                     (things-in g)))))
 
