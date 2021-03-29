@@ -1,20 +1,64 @@
 #lang racket
 
-(require (submod nomic/game/model moves))
+(require (submod nomic/game/model moves)
+         (prefix-in private: (submod nomic/gml/base games//relations)))
 
 (local-require rackunit)
 
-(start-game-with-players "Runi" "Laurond" "Woogachaka")
+(start-game-with-players "Runi" "Laurond" "Woogachaka" "Kenzo")
 (place-nexus #:mana 100 #:color 'green)
 (end-turn!)
+
 (check-eq? (current-player-name) "Laurond")
 (place-nexus #:mana 100 #:color 'blue)
 (end-turn!)
+
 (check-eq? (current-player-name) "Woogachaka")
 (place-nexus #:mana 100 #:color 'green)
 (end-turn!)
+
+(check-eq? (current-player-name) "Kenzo")
+(place-nexus #:mana 100 #:color 'orange)
+(end-turn!)
+
 (check-eq? (current-player-name) "Runi")
- 
+(check-eq? 1
+           (length (things-in-play-for (current-player))))
+(cast-spell (sevarog  #:mana 30))
+(set-destination-of (find "Runi" 'Sevarog)
+                    #:to (find "Laurond" 'Nexus))
+(check-eq? (destination-of (find "Runi" 'Sevarog))
+           (find "Laurond" 'Nexus))
+(check-eq? 2
+           (length (things-in-play-for (current-player))))
+(end-turn!)
+
+(check-eq? (current-player-name) "Laurond")
+(check-eq? 1
+           (length (things-in-play-for (current-player))))
+(cast-spell (parasite #:target (find "Runi" 'Sevarog)
+                      #:regen 30
+                      #:mana 1))
+(check-eq? 2
+           (length (things-in-play-for (current-player))))
+(end-turn!)
+
+(check-eq? (current-player-name) "Woogachaka")
+(check-eq? 1
+           (length (things-in-play-for (current-player))))
+(cast-spell (sevarog  #:mana 30))
+(end-turn!)
+
+(check-eq? (current-player-name) "Kenzo")
+(cast-spell (parasite #:target (find "Woogachaka" 'Sevarog)
+                      #:regen 15
+                      #:mana 1))
+(end-turn!)
+
+(check-eq? (current-player-name) "Runi")
+
+
+
 ; TODO: Put in check expects
 
 #|

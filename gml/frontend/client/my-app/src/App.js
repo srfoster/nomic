@@ -7,6 +7,8 @@ import React, { useState, useEffect } from 'react';
 import * as Mui from '@material-ui/core';
 import * as I from '@material-ui/icons';
 
+ import Draggable from 'react-draggable' 
+
 import {UnControlled as CodeMirror} from 'react-codemirror2' 
 
 require('codemirror/mode/scheme/scheme');
@@ -62,7 +64,7 @@ return <div><Mui.Accordion><Mui.AccordionSummary>Game State</Mui.AccordionSummar
 }
 
 function GameState (props){
-return <Mui.GridList cellHeight="160" cols="3">{props.gameState.things.map((t)=><ThingCard thing={t}/>)}</Mui.GridList>
+return <Mui.GridList cellHeight="160" cols="3">{props.gameState.things.map((t)=> <ThingCard thing={t}></ThingCard> )}</Mui.GridList>
 }
 
 function ThingCard (props){
@@ -86,10 +88,17 @@ var displayResponse = (r)=>{
 
 
   if(typeof(r) == "object"){
-   return <Mui.GridListTile cols="1">{                         !expanded ?  <Mui.Chip onClick={()=>setExpanded(true)} label={r.name}></Mui.Chip>  : 
- <Mui.Card variant="outlined" style={{backgroundColor: r.color?r.color:"white"}}><Mui.CardContent><Mui.Chip onClick={()=>setExpanded(false)} label={r.name}></Mui.Chip><Mui.Table><Mui.TableBody>{Object.keys(r).map((k)=>{ 
- return  <Mui.TableRow><Mui.TableCell>{k}</Mui.TableCell><Mui.TableCell>{r[k].type == "Thing" ? <ThingCard thing={r[k]}/> : displayResponse(r[k])}</Mui.TableCell></Mui.TableRow> 
- })}</Mui.TableBody></Mui.Table></Mui.CardContent></Mui.Card>}</Mui.GridListTile>
+   return <Mui.Card variant="outlined" style={{backgroundColor: r.color?r.color:"white", margin: 2}}><Mui.CardContent><ThingSummary onClick={()=>setExpanded(!expanded)} thing={r}></ThingSummary>{!expanded ? "" : 
+ 
+ <Mui.Table><Mui.TableBody>{Object.keys(r).map((k)=>{ 
+ return  <Mui.TableRow><Mui.TableCell>{k}</Mui.TableCell><Mui.TableCell>{<ThingCard thing={r[k]}/>}</Mui.TableCell></Mui.TableRow> 
+ })}</Mui.TableBody></Mui.Table>}</Mui.CardContent></Mui.Card>
+
+
+
+
+
+
   }
 
   if(typeof(r) == "string"){
@@ -108,6 +117,10 @@ var displayResponse = (r)=>{
 }
 
 return displayResponse(props.thing)
+}
+
+function ThingSummary (props){
+return <Mui.Chip label={Array.isArray(props.thing) ? props.thing.length : props.thing.name} onClick={props.onClick}></Mui.Chip>
 }
 
 function CodeEditor (props){

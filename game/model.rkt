@@ -7,6 +7,44 @@
   (submod nomic/gml/base games//relations)
   (submod nomic/gml/base VM))
 
+;;GRID
+(define a1
+  (thing #:name "A1"
+         #:type 'Square))
+(define b1
+  (thing #:name "B1"
+         #:type 'Square))
+(define a2
+  (thing #:name "A2"
+         #:type 'Square))
+(define b2
+  (thing #:name "B2"
+         #:type 'Square))
+
+(redescribe! a1
+             'north a2)
+(redescribe! a1
+             'east b1)
+(redescribe! a1
+             'north-east b2)
+(redescribe! a2
+             'south a1)
+(redescribe! a2
+             'east b2)
+(redescribe! a2
+             'south-east b1)
+(redescribe! b1
+             'north b2)
+(redescribe! b1
+             'west a1)
+(redescribe! b1
+             'north-west a2)
+(redescribe! b2
+             'south b1)
+(redescribe! b2
+             'west a2)
+(redescribe! b2
+             'south-west a1)
 
 ;;; STATE CHECKER
 (define state-checker
@@ -51,16 +89,48 @@
   (lambda (p)
     (string=? n (name #:of p))))
 
+(define (has-type? n)
+  (lambda (p)
+    (eq? n (type #:of p))))
+
 (define (find-by-name-in-inventory name player-name)
   (define player (find-player player-name))
   (define inventory (what-is 'inventory #:of player))
   (findf (has-name? name)
    inventory))
 
+(define (find-by-type-in-inventory type player-name)
+  (define player (find-player player-name))
+  (define inventory (what-is 'inventory #:of player))
+  (findf (has-type? type)
+   inventory))
+
+(define (all-things-in-play)
+  (define ps (value #:of players))
+  (flatten
+   (map (lambda (p)
+         (inventory #:of p))
+       ps)))
+
+(define (things-in-play-for p)
+  (inventory #:of p))
+
+(define (set-destination-of t1 #:to t2)
+  (redescribe! t1 'destination t2))
+
+(define (destination-of t1)
+  (what-is 'destination
+           #:of t1
+           #:fallback #f))
+
+(define (find player-name type)
+  (findf (has-type? type)
+         (things-in-play-for (find-player player-name))))
 
 ;;;PLAYERS
 (define (player #:name name)
   (thing #:name name
+         #:type 'Player
          'inventory '()))
 
 (define lindsey
@@ -115,20 +185,21 @@
 
 (define (nexus #:color col #:mana mana)
     (thing #:name "Nexus"
+           #:type 'Nexus 
            'color col
            'mana mana))
 
+;;; SEVAROG
 (define (sevarog #:mana mana)
   (thing #:name "Sevarog"
+         #:type 'Sevarog
+         'destination #f
          'mana mana))
 
-(define (clear-dead-target)
-  (define target (my 'target))
-  (when (is-dead? target)
-    (redescribe! (my-self) 'target #f)))
-
+;;; PARASITE
 (define (parasite #:target target #:mana [mana 1] #:regen [regen 30])
   (thing #:name "Parasite"
+         #:type 'Parasite
          'target target
          'mana mana
          'regen regen
@@ -150,8 +221,10 @@
                                '(let ()
                                   (clear-dead-target)))))
 
+;;DISENCHANTMENT
 (define (disenchantment #:target target #:mana mana)
   (thing #:name "Disenchantment"
+         #:type 'Disenchantment
          'target target
          'mana mana
          'disenchant (program
@@ -174,6 +247,7 @@
                                   (if-targetless-move-self-to-graveyard)))
          ))
 
+;;;GRAVEYARD
 (define (if-targetless-move-self-to-graveyard)
   (when (targetless? (my-self))
     (move-to-graveyard (my-self))))
@@ -181,21 +255,15 @@
 (define (targetless? t)
   (not (what-is 'target #:of t)))
 
+(define (clear-dead-target)
+  (define target (my 'target))
+  (when (is-dead? target)
+    (redescribe! (my-self) 'target #f)))
+
 (define (move-to-graveyard t)
   (redescribe! graveyard 'value (cons t (value #:of graveyard)))
   (define player (player-controlling t))
   (redescribe! player 'inventory (remove t (inventory #:of player))))
-
-(define (inventory #:of p)
-  (what-is 'inventory #:of p))
-
-(define (player-controlling t)
-  (define ps (value #:of players))
-  (findf (lambda (p)
-           (in-player-inventory? t p)) ps))
-
-(define (in-player-inventory? t p)
-  (member t (inventory #:of p)))
 
 (define (is-dead? t)
   (< (what-is 'mana #:of t) 0))
@@ -213,12 +281,22 @@
                            (map move-to-graveyard dead-things))
                 )))
 
-(define (all-things-in-play)
+;; INVENTORY
+(define (inventory #:of p)
+  (what-is 'inventory #:of p))
+
+(define (player-controlling t)
   (define ps (value #:of players))
-  (flatten
-   (map (lambda (p)
-         (inventory #:of p))
-       ps)))
+  (findf (lambda (p)
+           (in-player-inventory? t p)) ps))
+
+(define (in-player-inventory? t p)
+  (member t (inventory #:of p)))
+
+
+
+
+
 
 
 (define the-game
@@ -235,13 +313,32 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (module+ moves
-  (provide cast-spell
-           place-nexus
-           end-turn!
-           start-game-with-players
-           current-player-name
-           )
+  (provide
+   ;query game state
+   things-in-play-for
+   current-player
+   current-player-name
+   has-type?
+   has-name?
+   (rename-out [find-player player-named])
+   set-destination-of
+   destination-of
+   find
 
+   ;changes game state
+   cast-spell
+   place-nexus
+   start-game-with-players
+   end-turn!
+   sevarog
+   parasite
+   disenchantment
+   )
+  
+  (define (cast-spell t)
+    (add-to-inventory (current-player-name) t)
+    (deplete-nexus-mana (current-player-name) (what-is 'mana #:of t)))
+  
   (define (start-game-with-players . names)
     (redescribe! players 'value (map name->player names)))
   
@@ -250,10 +347,6 @@
       (error "You can't have a nexus with more than 100 mana! Cheater!"))
     (add-to-inventory (current-player-name) (nexus #:mana mana #:color color)))
   
-  (define (cast-spell t)
-    (add-to-inventory (current-player-name) t)
-    (deplete-nexus-mana (current-player-name) (what-is 'mana #:of t)))
-
   (define (end-turn!)
     (next-player))
   )

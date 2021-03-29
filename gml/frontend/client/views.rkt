@@ -2,8 +2,15 @@
 
 (require racket-react/client
          racket-react/components/api-explorer
-         racket-react/components/code-editor)
+         racket-react/components/code-editor
+         racket-react/components/drag-and-drop)
 
+(define-component ThingSummary
+  (return
+   (Chip
+    'label: @~{Array.isArray(props.thing) ? props.thing.length : props.thing.name}
+    'onClick: @~{props.onClick}
+    )))
 
 (define-component ThingCard
   (useState 'expanded @js{false})
@@ -17,8 +24,8 @@
    return @(div
             (tt @~{r.lang ? r.lang : ""})
             (CodeEditor 'script: @~{r.value}
-                         'onChange:
-                         @~{(editor, data, value)=>{setProgram(value)}})
+                        'onChange:
+                        @~{(editor, data, value)=>{setProgram(value)}})
             (Button 'onClick:
                     @~{()=>{
      window.server_call("http://localhost:8081",
@@ -33,20 +40,26 @@
 
 	  
   if(typeof(r) == "object"){
-   return @(GridListTile 'cols: 1
-                         @~{
-                            !expanded ? @(Chip onClick: @~{()=>setExpanded(true)}
-                                               'label: @~{r.name}) :
-    @(Card 'variant: "outlined"
-           'style: @~{{backgroundColor: r.color?r.color:"white"}}
-           (CardContent (Chip onClick: @~{()=>setExpanded(false)}
-                              'label: @~{r.name})
-                        (Table
-                         (TableBody
-                          @~{Object.keys(r).map((k)=>{
+   return @(Card 'variant: "outlined"
+                  'style: @~{{backgroundColor: r.color?r.color:"white", margin: 2}}
+                  (CardContent
+                   (ThingSummary onClick: @~{()=>setExpanded(!expanded)}
+                                 'thing: @~{r})
+                   @~{!expanded ? "" :
+ 
+    @(Table
+      (TableBody
+       @~{Object.keys(r).map((k)=>{
       return @(TableRow (TableCell @~{k})
-                        (TableCell @~{r[k].type == "Thing" ? <ThingCard thing={r[k]}/> : displayResponse(r[k])}))
-      })}))))})
+                        (TableCell @~{<ThingCard thing={r[k]}/>}))
+      })}))}
+                   ))
+
+
+
+   
+                      
+    
   } 
 
   if(typeof(r) == "string"){
@@ -74,8 +87,7 @@
   (return
    (GridList 'cellHeight: 160
              'cols: 3
-             @~{props.gameState.things.map((t)=><ThingCard thing={t}/>)}
-             )))
+             @~{props.gameState.things.map((t)=>@(ThingCard 'thing: @~{t}))})))
 
 (define-component
   GameController
