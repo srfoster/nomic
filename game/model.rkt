@@ -5,46 +5,21 @@
 
 (require
   (submod nomic/gml/base games//relations)
+  (submod nomic/gml/base games//graphs)
   (submod nomic/gml/base VM))
 
 ;;GRID
-(define a1
-  (thing #:name "A1"
-         #:type 'Square))
-(define b1
-  (thing #:name "B1"
-         #:type 'Square))
-(define a2
-  (thing #:name "A2"
-         #:type 'Square))
-(define b2
-  (thing #:name "B2"
-         #:type 'Square))
 
-(redescribe! a1
-             'north a2)
-(redescribe! a1
-             'east b1)
-(redescribe! a1
-             'north-east b2)
-(redescribe! a2
-             'south a1)
-(redescribe! a2
-             'east b2)
-(redescribe! a2
-             'south-east b1)
-(redescribe! b1
-             'north b2)
-(redescribe! b1
-             'west a1)
-(redescribe! b1
-             'north-west a2)
-(redescribe! b2
-             'south b1)
-(redescribe! b2
-             'west a2)
-(redescribe! b2
-             'south-west a1)
+(define board-g (grid-graph 8 8))
+(define battlefield 
+  (thing #:name "Battlefield"
+	 #:value board-g))
+
+(define (put-on-battlefield t x y)
+  (define place (get-tile/xy board-g x y))
+
+  (place-on-tile )
+  )
 
 ;;; STATE CHECKER
 (define state-checker
@@ -358,6 +333,7 @@
 ;TODO: Reeep things whose target is dead...
   ; Or any children?
 
+#;
 (module+ main
   (require nomic/gml/server
            racket/sandbox

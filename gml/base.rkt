@@ -421,7 +421,15 @@
 
 
 (module games//graphs racket/base
-  (provide (all-from-out (submod ".." game/things/descriptions/names/types/values)))
+  (provide 
+    new-thing-graph
+    path
+    link!
+
+    grid-graph
+    get-tile/xy
+
+    (all-from-out (submod ".." game/things/descriptions/names/types/values)))
   
   (require
     (except-in (submod ".." game/things/descriptions/names/types/values) thing)
@@ -442,7 +450,10 @@
 
     g)
 
-  (define (tile g x y)
+  ;Tiles can be entered and exited.  But for all tiles in a graph,
+  ;  a particular thing can only be on one at a time.
+
+  (define (get-tile/xy g x y)
     ;Not very efficient.  Cache this value!
     (findf 
       (lambda (t)
@@ -451,15 +462,58 @@
 	  (eq? y (what-is 'grid-y #:of t)) )) 
       (get-vertices g)))
 
+  (define (all-tiles g)
+    (get-vertices g))
+
+  (define (next-tile g source-t dest-t)
+    (define the-path
+      (path g source-t dest-t))
+
+    (cond 
+      [(not the-path) #f]
+      [(< 1 (length the-path)) 
+       (second the-path)]
+      [(= 1 (length the-path)) 
+       (first the-path)]))
+
+  (define (exit-all-tiles g p)
+    (for ([t (all-tiles g)])
+	 (exit-tile p t)))
+
+  (define (exit-tile p t)
+    (define things (what-is 'things-on-tile #:of h #:fallback #f))
+    (when (not things)
+      (redescribe! t 'things-on-tile
+		   '()))
+    (redescribe! t 'things-on-tile
+		 (curry remove p)))
+
+  (define (enter-tile g p t)
+    (exit-all-tiles g p)
+    (redescribe! t 'things-on-tile
+		 (curry cons p)))
+
+  (define (current-tile g p)
+    (findf
+      (lambda (h)
+	(member p (what-is 'things-on-tile #:of h #:fallback '())))
+      (all-tiles g)))
+
+
+  (define (move-toward-tile g p h)
+    (define nh (next-tile g (current-tile g p) h))
+    (enter-tile g p nh))
+
+
   (define (grid-graph 
 	    #:constructor [constructor (curry thing #:name "Tile")]
 	    w h)
     (define vs
       (for/list ([wi (range w)])
-	      (for/list ([hi (range h)])
-			(constructor 
-			  'grid-x wi	
-			  'grid-y hi))))
+		(for/list ([hi (range h)])
+			  (constructor 
+			    'grid-x wi	
+			    'grid-y hi))))
 
     (define g (apply new-thing-graph (flatten vs)))
 
@@ -470,28 +524,28 @@
 
 			(define north
 			  (with-handlers ([exn:fail? (thunk* #f)])
-			    (list-ref (list-ref vs (sub1 hi)) wi)))
+					 (list-ref (list-ref vs (sub1 hi)) wi)))
 			(define south
 			  (with-handlers ([exn:fail? (thunk* #f)])
-			    (list-ref (list-ref vs (add1 hi)) wi)))
+					 (list-ref (list-ref vs (add1 hi)) wi)))
 			(define east
 			  (with-handlers ([exn:fail? (thunk* #f)])
-			    (list-ref (list-ref vs hi) (add1 wi))))
+					 (list-ref (list-ref vs hi) (add1 wi))))
 			(define west
 			  (with-handlers ([exn:fail? (thunk* #f)])
-			    (list-ref (list-ref vs hi) (sub1 wi))))
+					 (list-ref (list-ref vs hi) (sub1 wi))))
 			(define north-east
 			  (with-handlers ([exn:fail? (thunk* #f)])
-			    (list-ref (list-ref vs (sub1 hi)) (add1 wi))))
+					 (list-ref (list-ref vs (sub1 hi)) (add1 wi))))
 			(define south-east
 			  (with-handlers ([exn:fail? (thunk* #f)])
-			    (list-ref (list-ref vs (sub1 hi)) (add1 wi))))
+					 (list-ref (list-ref vs (sub1 hi)) (add1 wi))))
 			(define south-west
 			  (with-handlers ([exn:fail? (thunk* #f)])
-			    (list-ref (list-ref vs (add1 hi)) (sub1 wi))))
+					 (list-ref (list-ref vs (add1 hi)) (sub1 wi))))
 			(define north-west
 			  (with-handlers ([exn:fail? (thunk* #f)])
-			    (list-ref (list-ref vs (sub1 hi)) (sub1 wi))))
+					 (list-ref (list-ref vs (sub1 hi)) (sub1 wi))))
 
 
 			(and north
@@ -545,68 +599,27 @@
     (check-eq? 4 (length (path g house2 house5))
 	       "There should be 2 houses between house 2 and house 5: total 4 houses")
 
-    (define (all-houses)
-      (get-vertices g))
-
-    (define (next-house source-h dest-h)
-      (define the-path
-	(path g source-h dest-h))
-
-      (cond 
-	[(not the-path) #f]
-	[(< 1 (length the-path)) 
-	 (second the-path)]
-	[(= 1 (length the-path)) 
-	 (first the-path)]))
-
-
-    ;TODO: make "enterable" things...
-
-    (define (exit-all p)
-      (for ([h (all-houses)])
-	   (exit-house p h)))
-
-    (define (exit-house p h)
-      (redescribe! h 'people
-		   (curry remove p)))
-
-    (define (enter-house p h)
-      (exit-all p)
-      (redescribe! h 'people
-		   (curry cons p)))
-
-    (define (current-house p)
-      (findf
-        (lambda (h)
-	  (member p (what-is 'people #:of h)))
-	(all-houses)))
-
-    (define (move-toward p h)
-      (define nh (next-house (current-house p) h))
-      (enter-house p nh))
-
-    
     (define dude (thing #:name "Dude"))
-    (enter-house dude house2)
+    (enter-tile g dude house2)
 
     (check-eq? 1 (length (what-is 'people #:of house2)))
 
-    (move-toward dude house5)
+    (move-toward-tile g dude house5)
 
     (check-eq? 0 (length (what-is 'people #:of house2)))
     (check-eq? 1 (length (what-is 'people #:of house1)))
 
-    (move-toward dude house5)
-    
+    (move-toward-tile g dude house5)
+
     (check-eq? 0 (length (what-is 'people #:of house1)))
     (check-eq? 1 (length (what-is 'people #:of house4)))
 
-    (move-toward dude house5)
+    (move-toward-tile g dude house5)
 
     (check-eq? 0 (length (what-is 'people #:of house4)))
     (check-eq? 1 (length (what-is 'people #:of house5)))
 
-    (move-toward dude house5)
+    (move-toward-tile dude house5)
     (check-eq? 1 (length (what-is 'people #:of house5)))
 
 
@@ -619,8 +632,8 @@
       5
       (length
 	(path new-g
-	      (tile new-g 0 0)
-	      (tile new-g 3 4)
+	      (get-tile/xy new-g 0 0)
+	      (get-tile/xy new-g 3 4)
 	      )))
 
     ))
@@ -630,436 +643,436 @@
 
 #;
 (module chess racket/base
-  (module+ test
-    (define square-names
-      (there-are-squares '((a3 b3 c3)
-                           (a2 b2 c2)
-                           (a1 b1 c1))))
+	(module+ test
+		 (define square-names
+		   (there-are-squares '((a3 b3 c3)
+					(a2 b2 c2)
+					(a1 b1 c1))))
 
-    (define square-values
-      (with-contents '((__ __ __)
-                       (WP WP WP)
-                       (WR WN WB))))
-    )
-  )
+		 (define square-values
+		   (with-contents '((__ __ __)
+				    (WP WP WP)
+				    (WR WN WB))))
+		 )
+	)
 
 #;
 (module MtG racket/base
-  
-  (require
-    (submod ".." games//relations)
-    racket/contract)
-  
-  (module+ test
-    (define alice
-      (thing #:name "Alice"
-             #:type 'Player))
 
-    (define bob
-      (thing #:name "Bob"
-             #:type 'Player))
+	(require
+	  (submod ".." games//relations)
+	  racket/contract)
 
-    
-    
-    (define fireball (thing #:name "Fireball"
-                            #:type 'Card))
-    (define goblin   (thing #:name "Goblin"
-                            #:type 'Card))
-    (define mountain (thing #:name "Mountain"
-                            #:type 'Card))
-    
-    (define alice:library
-      (thing #:name "Alice's Library"
-             #:type 'Library
-             #:value (list fireball)))
+	(module+ test
+		 (define alice
+		   (thing #:name "Alice"
+			  #:type 'Player))
 
-    (define bob:library
-      (thing #:name "Bob's Library"
-             #:type 'Library
-             #:value (list goblin mountain)))
+		 (define bob
+		   (thing #:name "Bob"
+			  #:type 'Player))
 
-    (define g
-      (put-in (new-game)
-              bob
-              alice
-              fireball
-              goblin
-              mountain
-              alice:library
-              bob:library))
 
-    (describe-things-in g)
-    
-    )
-  )
+
+		 (define fireball (thing #:name "Fireball"
+					 #:type 'Card))
+		 (define goblin   (thing #:name "Goblin"
+					 #:type 'Card))
+		 (define mountain (thing #:name "Mountain"
+					 #:type 'Card))
+
+		 (define alice:library
+		   (thing #:name "Alice's Library"
+			  #:type 'Library
+			  #:value (list fireball)))
+
+		 (define bob:library
+		   (thing #:name "Bob's Library"
+			  #:type 'Library
+			  #:value (list goblin mountain)))
+
+		 (define g
+		   (put-in (new-game)
+			   bob
+			   alice
+			   fireball
+			   goblin
+			   mountain
+			   alice:library
+			   bob:library))
+
+		 (describe-things-in g)
+
+		 )
+	)
 
 #;
 (require (submod "." MtG test))
 
 (module VM racket/base
-  (provide tick tick-thing my-output run my program program?
-           my-self
-           run-program)
-  
-  (require
-    (submod ".." games//relations)
-    (only-in racket/format ~v))
+	(provide tick tick-thing my-output run my program program?
+		 my-self
+		 run-program)
 
-  (define-namespace-anchor a)
-  (define ns (namespace-anchor->namespace a))
+	(require
+	  (submod ".." games//relations)
+	  (only-in racket/format ~v))
 
-  (define (program code #:lang [lang #f])
-    (thing #:name "Program"
-           #:type 'Program
-           #:value (~v code)
-           'lang lang))
+	(define-namespace-anchor a)
+	(define ns (namespace-anchor->namespace a))
 
-  (define (program? t)
-    (eq? 'Program (type #:of t)))
-  
-  (define (my k)
-    (what-is k #:of (my-self)))
+	(define (program code #:lang [lang #f])
+	  (thing #:name "Program"
+		 #:type 'Program
+		 #:value (~v code)
+		 'lang lang))
 
-  (define my-output (make-parameter #f))
+	(define (program? t)
+	  (eq? 'Program (type #:of t)))
 
-  (define (tick g)
-    (define programs
-      (filter
-       (lambda (t) (eq? (type #:of t) 'Program))
-       (things-in g)))
+	(define (my k)
+	  (what-is k #:of (my-self)))
 
-    (for ([p programs])
-      (tick-thing p)))
+	(define my-output (make-parameter #f))
 
-  (define (tick-thing p)
-    (parameterize ([my-output (what-is 'output #:of p)])
-      (define new-v (eval (read (open-input-string
-                                 (substring (value #:of p) 1 ) ))
-                          ns))
-      (redescribe! p 'output
-                     new-v)))
-  
-  (define (output #:of t)
-    (what-is 'output #:of t))
+	(define (tick g)
+	  (define programs
+	    (filter
+	      (lambda (t) (eq? (type #:of t) 'Program))
+	      (things-in g)))
 
-  (define my-self (make-parameter #f))
+	  (for ([p programs])
+	       (tick-thing p)))
 
-  (define (run-program p) ;Must be attatched to a parent thing
-    (define code
-      (value #:of p))
+	(define (tick-thing p)
+	  (parameterize ([my-output (what-is 'output #:of p)])
+	    (define new-v (eval (read (open-input-string
+					(substring (value #:of p) 1 ) ))
+				ns))
+	    (redescribe! p 'output
+			 new-v)))
 
-    (define lang (what-is 'lang #:of p #:fallback #f))
-      
-    (parameterize ([my-self (parent-of p)])
-      (define to-open (substring code 1))
+	(define (output #:of t)
+	  (what-is 'output #:of t))
 
-      (when lang
-        (dynamic-require lang #f))
-      (eval `(let ()
-               ,(when lang `(local-require ,lang))
-               ,(read (open-input-string to-open)))
-            ns)))
+	(define my-self (make-parameter #f))
 
-  (define (run k #:of t)
-    (define b (what-is k #:of t
-                       #:fallback #f))
- 
-    (when b
-      (define code
-        (if (thing? b)
-          (value #:of b) ;Should check type is 'Program?
-          b))
+	(define (run-program p) ;Must be attatched to a parent thing
+	  (define code
+	    (value #:of p))
 
-      (define lang (and
-                    (thing? b)
-                    (what-is 'lang #:of b #:fallback #f)))
-      
-      (parameterize ([my-self t])
-        (define to-open (substring code 1))
+	  (define lang (what-is 'lang #:of p #:fallback #f))
 
-        ;;(displayln t)
+	  (parameterize ([my-self (parent-of p)])
+	    (define to-open (substring code 1))
 
-        ;(writeln to-open)
-        ;(writeln lang)
+	    (when lang
+	      (dynamic-require lang #f))
+	    (eval `(let ()
+		     ,(when lang `(local-require ,lang))
+		     ,(read (open-input-string to-open)))
+		  ns)))
 
-        ;(displayln (dynamic-require lang 'action:change-mana))
+	(define (run k #:of t)
+	  (define b (what-is k #:of t
+			     #:fallback #f))
 
-        ;(displayln (eval '(action:change-mana #:of 'a #:by #'b)
-        ;                 (module->namespace '(submod nomic/gml/base CS))))
+	  (when b
+	    (define code
+	      (if (thing? b)
+		  (value #:of b) ;Should check type is 'Program?
+		  b))
 
-        ;(displayln (read (open-input-string to-open)))
-        
-        (when lang
-          (dynamic-require lang #f))
-        (eval `(let ()
-                 ,(when lang `(local-require ,lang))
-                 ,(read (open-input-string to-open)))
-              ns
-              #;
-              (if lang
-                  (module->namespace lang)
-                  ns)))))
+	    (define lang (and
+			   (thing? b)
+			   (what-is 'lang #:of b #:fallback #f)))
 
-  
-  (module+ test
-    (require rackunit
-             racket/list)
+	    (parameterize ([my-self t])
+	      (define to-open (substring code 1))
 
-    
+	      ;;(displayln t)
 
-    (define program
-      (thing #:name "Program"
-             #:type 'Program
-             #:value "'(+ 1 1)"
-             'output (void)
-             ))
+	      ;(writeln to-open)
+	      ;(writeln lang)
 
-    (define g1
-      (put-in (new-game)
-              program))
+	      ;(displayln (dynamic-require lang 'action:change-mana))
 
-    (tick g1)
+	      ;(displayln (eval '(action:change-mana #:of 'a #:by #'b)
+	      ;                 (module->namespace '(submod nomic/gml/base CS))))
 
-    (check-equal? (what-is 'output #:of program)
-                  2)
+	      ;(displayln (read (open-input-string to-open)))
 
-    (require rackunit)
-   
-
-    (define program2
-      (thing #:name "Program"
-             #:type 'Program
-             #:value "'(+ 5 (my-output))"
-             'output 5
-             ))
-
-    (define g2
-      (put-in (new-game)
-              program2))
-
-    (tick g2)
-
-    (check-equal? (what-is 'output #:of program2)
-                  10)
+	      (when lang
+		(dynamic-require lang #f))
+	      (eval `(let ()
+		       ,(when lang `(local-require ,lang))
+		       ,(read (open-input-string to-open)))
+		    ns
+		    #;
+		    (if lang
+			(module->namespace lang)
+			ns)))))
 
 
-    (define program3
-      (thing #:name "Program"
-             #:type 'Program
-             #:value "'(put-in (my-output) (thing #:name \"HI\"))"
-             'output (new-game)
-             ))
+	(module+ test
+		 (require rackunit
+			  racket/list)
 
-    (define g3
-      (put-in (new-game)
-              program3))
 
-    (tick g3)
 
-    (check-equal? (length
-                   (things-in
-                    (what-is 'output #:of program3)))
-                  1)
+		 (define program
+		   (thing #:name "Program"
+			  #:type 'Program
+			  #:value "'(+ 1 1)"
+			  'output (void)
+			  ))
 
-    (tick g3)
+		 (define g1
+		   (put-in (new-game)
+			   program))
 
-    (check-equal? (length
-                   (things-in
-                    (what-is 'output #:of program3)))
-                  2)
+		 (tick g1)
 
-    ;(print-game g3)
-    ;(describe-things-in (output #:of (first (things-in g3))))
-    )
-  )
+		 (check-equal? (what-is 'output #:of program)
+			       2)
+
+		 (require rackunit)
+
+
+		 (define program2
+		   (thing #:name "Program"
+			  #:type 'Program
+			  #:value "'(+ 5 (my-output))"
+			  'output 5
+			  ))
+
+		 (define g2
+		   (put-in (new-game)
+			   program2))
+
+		 (tick g2)
+
+		 (check-equal? (what-is 'output #:of program2)
+			       10)
+
+
+		 (define program3
+		   (thing #:name "Program"
+			  #:type 'Program
+			  #:value "'(put-in (my-output) (thing #:name \"HI\"))"
+			  'output (new-game)
+			  ))
+
+		 (define g3
+		   (put-in (new-game)
+			   program3))
+
+		 (tick g3)
+
+		 (check-equal? (length
+				 (things-in
+				   (what-is 'output #:of program3)))
+			       1)
+
+		 (tick g3)
+
+		 (check-equal? (length
+				 (things-in
+				   (what-is 'output #:of program3)))
+			       2)
+
+		 ;(print-game g3)
+		 ;(describe-things-in (output #:of (first (things-in g3))))
+		 )
+	)
 
 (require (submod "." VM test))
 
 
 (module CS racket/base
-  (provide action:change-mana do-action
-           (all-from-out (submod ".." games//relations)))
-  
-  (require
-    (submod ".." games//relations)
-    (submod ".." VM))
+	(provide action:change-mana do-action
+		 (all-from-out (submod ".." games//relations)))
+
+	(require
+	  (submod ".." games//relations)
+	  (submod ".." VM))
 
 
-  (define (mana #:of t)
-    (what-is 'mana #:of t))
+	(define (mana #:of t)
+	  (what-is 'mana #:of t))
 
-  (define (action:change-mana #:of t #:by a)
-    (thing #:name "Change Mana Action"
-           #:type 'Action
-           'target t
-           'effect 'redescribe!
-           'key 'mana
-           'val (+ (mana #:of t) a)))
+	(define (action:change-mana #:of t #:by a)
+	  (thing #:name "Change Mana Action"
+		 #:type 'Action
+		 'target t
+		 'effect 'redescribe!
+		 'key 'mana
+		 'val (+ (mana #:of t) a)))
 
-  (define (do-action a)
-    (local-require racket/match)
-    
-    (define e (what-is 'effect #:of a))
-    (define t (what-is 'target #:of a))
-    (define k (what-is 'key #:of a))
-    (define v (what-is 'val #:of a))
+	(define (do-action a)
+	  (local-require racket/match)
 
-    (match e
-      ['redescribe! (redescribe! t k v)]
-      [else (error "Not an allowed action: " e)])
-    )
+	  (define e (what-is 'effect #:of a))
+	  (define t (what-is 'target #:of a))
+	  (define k (what-is 'key #:of a))
+	  (define v (what-is 'val #:of a))
 
-
-
-
-  (module+ test
-    (require rackunit
-             racket/list racket/function racket/contract)
-
-    (define lindsey (thing #:name "Lindsey"
-                           #:type 'Player))
-
-    (define stephen (thing #:name "Stephen"
-                           #:type 'Player))
-
-    (define current-player (thing #:name "Current Player"
-                                  #:type 'CurrentPlayer
-                                  #:value stephen))
-
-    (define stephen:nexus (thing #:name "Stephen's Nexus"
-                                 #:type 'Permanent
-                                 'mana 100
-                                 'regen 25
-                                 'owner stephen
-                                 'on-turn-begin
-                                 (program
-                                  #:lang '(submod nomic/gml/base CS)
-                                  '(displayln (my-self))
-                                  #;
-                                  '(action:change-mana
-                                   #:of (my-self)
-                                   #:by (my 'regen)))))
-
-    (define lindsey:nexus (thing #:name "Lindsey's Nexus"
-                                 #:type 'Permanent
-                                 'mana 100
-                                 'regen 25
-                                 'owner lindsey
-                                 'on-turn-begin
-                                 (program
-                                  #:lang '(submod nomic/gml/base CS)
-                                  '(action:change-mana
-                                   #:of (my-self)
-                                   #:by (my 'regen)))))
-
-    (define lindsey:sevarog (thing #:name "Lindsey's Sevarog"
-                                   #:type 'Creature
-                                   'mana 100))
-
-    (define stephen:parasite (thing #:name "Stephen's Parasite"
-                                    #:type 'Creature
-                                    'mana 100
-                                    'regen 33
-                                    'target lindsey:sevarog
-                                    'on-turn-begin
-                                    (program
-                                     #:lang '(submod nomic/gml/base CS)
-                                     
-                                     '(list
-                                       (action:change-mana
-                                        #:of (my 'target)
-                                        #:by (- (my 'regen)))
-                                       (action:change-mana
-                                        #:of (my-self)
-                                        #:by (my 'regen))))))
-
-    (define action-queue (thing #:name "Action Queue"
-                                #:type 'Queue
-                                'queue '()
-                                
-                                'flush
-                                (program 
-                                 #:lang '(submod nomic/gml/base CS)
-                                 '(let ()
-                                    (map do-action
-                                         (what-is 'queue
-                                                  #:of (my-self)))
-                                    (redescribe! (my-self) 'queue '())
-                                    ))))
-
-    (define g
-      (put-in (new-game)
-              stephen
-              lindsey
-              current-player
-              stephen:nexus
-              lindsey:nexus
-              lindsey:sevarog
-              stephen:parasite
-              action-queue))
-
-    ;TODO: Move extra-game logic like this into the game...
-
-    
-    (define as
-      (filter (not/c void?)
-              (flatten
-               (map (lambda (t)
-                      (run 'on-turn-begin #:of t))
-                    (things-in g)))))
-
-    
-    (redescribe! action-queue
-                 'queue
-                 as)
-
-    ;We've queued the changes, but they haven't run yet
-    
-    (check-equal? (mana #:of lindsey:sevarog)
-                  100)
-
-    (check-equal? (mana #:of stephen:parasite)
-                  100)
-
-    ;Now, they will run...
-    
-    (run 'flush #:of action-queue)
-
-    (check-equal? (mana #:of lindsey:sevarog)
-                  67)
-
-    (check-equal? (mana #:of stephen:parasite)
-                  133)
-
-
-
-    
-    #|
-
-    (define Spell
-      (type Spell #:subtype (any-of 'Permanent 'Creature 'Enchantment)
-                  #:state   (any-of 'in-play 'in-library)
-                  #:condition (if (state-is 'in-play)
-                                  (can-have #:target (of-type 'Spell)))
-                  #:content program?
-                  #:value any?))
-
- 
-    (define Player
-      (type 'Player
-             #:library (list-of Spell)
-             #:in-play (list-of Spell)))
+	  (match e
+		 ['redescribe! (redescribe! t k v)]
+		 [else (error "Not an allowed action: " e)])
+	  )
 
 
 
 
+	(module+ test
+		 (require rackunit
+			  racket/list racket/function racket/contract)
 
-    |#
+		 (define lindsey (thing #:name "Lindsey"
+					#:type 'Player))
+
+		 (define stephen (thing #:name "Stephen"
+					#:type 'Player))
+
+		 (define current-player (thing #:name "Current Player"
+					       #:type 'CurrentPlayer
+					       #:value stephen))
+
+		 (define stephen:nexus (thing #:name "Stephen's Nexus"
+					      #:type 'Permanent
+					      'mana 100
+					      'regen 25
+					      'owner stephen
+					      'on-turn-begin
+					      (program
+						#:lang '(submod nomic/gml/base CS)
+						'(displayln (my-self))
+						#;
+						'(action:change-mana
+						   #:of (my-self)
+						   #:by (my 'regen)))))
+
+		 (define lindsey:nexus (thing #:name "Lindsey's Nexus"
+					      #:type 'Permanent
+					      'mana 100
+					      'regen 25
+					      'owner lindsey
+					      'on-turn-begin
+					      (program
+						#:lang '(submod nomic/gml/base CS)
+						'(action:change-mana
+						   #:of (my-self)
+						   #:by (my 'regen)))))
+
+		 (define lindsey:sevarog (thing #:name "Lindsey's Sevarog"
+						#:type 'Creature
+						'mana 100))
+
+		 (define stephen:parasite (thing #:name "Stephen's Parasite"
+						 #:type 'Creature
+						 'mana 100
+						 'regen 33
+						 'target lindsey:sevarog
+						 'on-turn-begin
+						 (program
+						   #:lang '(submod nomic/gml/base CS)
+
+						   '(list
+						      (action:change-mana
+							#:of (my 'target)
+							#:by (- (my 'regen)))
+						      (action:change-mana
+							#:of (my-self)
+							#:by (my 'regen))))))
+
+		 (define action-queue (thing #:name "Action Queue"
+					     #:type 'Queue
+					     'queue '()
+
+					     'flush
+					     (program 
+					       #:lang '(submod nomic/gml/base CS)
+					       '(let ()
+						  (map do-action
+						       (what-is 'queue
+								#:of (my-self)))
+						  (redescribe! (my-self) 'queue '())
+						  ))))
+
+		 (define g
+		   (put-in (new-game)
+			   stephen
+			   lindsey
+			   current-player
+			   stephen:nexus
+			   lindsey:nexus
+			   lindsey:sevarog
+			   stephen:parasite
+			   action-queue))
+
+		 ;TODO: Move extra-game logic like this into the game...
 
 
-    
-    )
-  )
+		 (define as
+		   (filter (not/c void?)
+			   (flatten
+			     (map (lambda (t)
+				    (run 'on-turn-begin #:of t))
+				  (things-in g)))))
+
+
+		 (redescribe! action-queue
+			      'queue
+			      as)
+
+		 ;We've queued the changes, but they haven't run yet
+
+		 (check-equal? (mana #:of lindsey:sevarog)
+			       100)
+
+		 (check-equal? (mana #:of stephen:parasite)
+			       100)
+
+		 ;Now, they will run...
+
+		 (run 'flush #:of action-queue)
+
+		 (check-equal? (mana #:of lindsey:sevarog)
+			       67)
+
+		 (check-equal? (mana #:of stephen:parasite)
+			       133)
+
+
+
+
+		 #|
+
+		 (define Spell
+		   (type Spell #:subtype (any-of 'Permanent 'Creature 'Enchantment)
+			 #:state   (any-of 'in-play 'in-library)
+			 #:condition (if (state-is 'in-play)
+					 (can-have #:target (of-type 'Spell)))
+			 #:content program?
+			 #:value any?))
+
+
+		 (define Player
+		   (type 'Player
+			 #:library (list-of Spell)
+			 #:in-play (list-of Spell)))
+
+
+
+
+
+		 |#
+
+
+
+		 )
+	)
 
 
 (require (submod "." CS test))
