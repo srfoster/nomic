@@ -11,7 +11,8 @@
 
          :
          watch
-         with-twitch-id)
+         with-twitch-id
+         current-twitch-id)
 
 
 (define (watch)

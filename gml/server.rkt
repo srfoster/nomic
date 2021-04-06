@@ -7,6 +7,7 @@
 
 (require racket/sandbox
          racket-react/server
+         codespells-server/spell-execution
          json
          (submod nomic/gml/base games//relations)
          (submod nomic/gml/base VM))
@@ -114,11 +115,25 @@
        ((on-twitch-spell) r)
        (with-embeds
            (response/json/cors
-            (hash))))]))
+            (hash))))]
+
+    [("eval-spell") ;To match the REST interface for codespells-server/main
+     #:method "post"
+     (lambda (r)
+       (eval-spell r)
+
+       (with-embeds
+           (response/json/cors
+            (hash)))
+       )]
+
+    ))
 
 (define (serve-model g)
   (set! the-game g)
-  (serve/servlet do-routing
+  (serve/servlet (lambda(r)
+                   (displayln r)
+                   (do-routing r))
                  #:port 8081
                  #:servlet-regexp #rx""
                  #:launch-browser? #f

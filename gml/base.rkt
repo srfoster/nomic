@@ -429,6 +429,11 @@
     grid-graph
     get-tile/xy
 
+    enter-tile
+    exit-tile
+    exit-all-tiles
+
+    (all-from-out graph)
     (all-from-out (submod ".." game/things/descriptions/names/types/values)))
   
   (require
@@ -481,13 +486,14 @@
 	 (exit-tile p t)))
 
   (define (exit-tile p t)
-    (define things (what-is 'things-on-tile #:of h #:fallback #f))
+    (define things (what-is 'things-on-tile #:of t #:fallback #f))
     (when (not things)
       (redescribe! t 'things-on-tile
 		   '()))
     (redescribe! t 'things-on-tile
 		 (curry remove p)))
 
+  ;Calling enter-tile on a thing makes it a tile.
   (define (enter-tile g p t)
     (exit-all-tiles g p)
     (redescribe! t 'things-on-tile
@@ -565,7 +571,7 @@
 			(and north-west
 			     (add-edge! g current north-west))))
 
-    g)
+    (values g vs))
 
   (define (link! g v1 v2)
     (add-edge! g v1 v2))
@@ -578,10 +584,11 @@
     test
     (require rackunit)
 
-    ;TODO: Convenience functions for grids
-
     (define (house #:name n)
       (thing #:name n 'people '()))
+
+    (define (people #:of h)
+      (what-is 'things-on-tile #:of h))
 
     (define house1 (house #:name "House 1"))
     (define house2 (house #:name "House 2"))
@@ -602,30 +609,30 @@
     (define dude (thing #:name "Dude"))
     (enter-tile g dude house2)
 
-    (check-eq? 1 (length (what-is 'people #:of house2)))
+    (check-eq? 1 (length (people #:of house2)))
 
     (move-toward-tile g dude house5)
 
-    (check-eq? 0 (length (what-is 'people #:of house2)))
-    (check-eq? 1 (length (what-is 'people #:of house1)))
+    (check-eq? 0 (length (people #:of house2)))
+    (check-eq? 1 (length (people #:of house1)))
 
     (move-toward-tile g dude house5)
 
-    (check-eq? 0 (length (what-is 'people #:of house1)))
-    (check-eq? 1 (length (what-is 'people #:of house4)))
+    (check-eq? 0 (length (people #:of house1)))
+    (check-eq? 1 (length (people #:of house4)))
 
     (move-toward-tile g dude house5)
 
-    (check-eq? 0 (length (what-is 'people #:of house4)))
-    (check-eq? 1 (length (what-is 'people #:of house5)))
+    (check-eq? 0 (length (people #:of house4)))
+    (check-eq? 1 (length (people #:of house5)))
 
-    (move-toward-tile dude house5)
-    (check-eq? 1 (length (what-is 'people #:of house5)))
+    (move-toward-tile g dude house5)
+    (check-eq? 1 (length (people #:of house5)))
 
 
     ;Test for grid graphs, e.g. chess
 
-    (define new-g
+    (define-values (new-g tiles)
       (grid-graph 5 5))
 
     (check-eq?

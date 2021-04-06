@@ -5,8 +5,13 @@
 
 (local-require rackunit)
 
-(start-game-with-players "Runi" "Laurond" "Woogachaka" "Kenzo")
+(start-game-with-players
+ #:map chessboard-battlefield
+ "Runi" "Laurond" "Woogachaka" "Kenzo")
+
+;Runi begins...
 (place-nexus #:mana 100 #:color 'green)
+(put-on-battlefield (find "Runi" 'Nexus) 0 0)
 (end-turn!)
 
 (check-eq? (current-player-name) "Laurond")
@@ -90,3 +95,6 @@
 (void (run 'state-check #:of state-checker))
 (check-eq? (length (value #:of graveyard)) 2)
 |#
+
+(require (only-in nomic/game/model serve-game))
+(module+ main (serve-game))

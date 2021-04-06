@@ -10,16 +10,16 @@
 
 ;;GRID
 
-(define board-g (grid-graph 8 8))
-(define battlefield 
+(define-values (board-g tiles) (grid-graph 8 8))
+
+(define chessboard-battlefield 
   (thing #:name "Battlefield"
-	 #:value board-g))
+         #:value tiles))
 
-(define (put-on-battlefield t x y)
-  (define place (get-tile/xy board-g x y))
+(define (put-on-battlefield p x y)
+  (define t (get-tile/xy board-g x y))
 
-  (place-on-tile )
-  )
+  (enter-tile board-g p t))
 
 ;;; STATE CHECKER
 (define state-checker
@@ -37,7 +37,7 @@
          #:value (list)))
 
 (define (watcher-name w)
-    (name #:of w))
+  (name #:of w))
 
 (define (find-watcher-by-twitch-id id)
   (findf (lambda (w)
@@ -56,7 +56,7 @@
     (member w-name watcher-names-list string=?))
   
   (when (not (already-watching? w))
-   (redescribe! watchers 'value (cons w watcher-list))))
+    (redescribe! watchers 'value (cons w watcher-list))))
 
 
 ;;;UTIL
@@ -72,20 +72,20 @@
   (define player (find-player player-name))
   (define inventory (what-is 'inventory #:of player))
   (findf (has-name? name)
-   inventory))
+         inventory))
 
 (define (find-by-type-in-inventory type player-name)
   (define player (find-player player-name))
   (define inventory (what-is 'inventory #:of player))
   (findf (has-type? type)
-   inventory))
+         inventory))
 
 (define (all-things-in-play)
   (define ps (value #:of players))
   (flatten
    (map (lambda (p)
-         (inventory #:of p))
-       ps)))
+          (inventory #:of p))
+        ps)))
 
 (define (things-in-play-for p)
   (inventory #:of p))
@@ -103,20 +103,17 @@
          (things-in-play-for (find-player player-name))))
 
 ;;;PLAYERS
+
+(define the-game (make-parameter (new-game)))
+
 (define (player #:name name)
   (thing #:name name
          #:type 'Player
          'inventory '()))
 
-(define lindsey
-  (player #:name "Lindsey"))
-
-(define stephen
-  (player #:name "Stephen"))
-  
 (define players
   (thing #:name "Players"
-         #:value (list stephen lindsey)
+         #:value (list)
          'current-player 0))
 
 (define (name->player n)
@@ -135,7 +132,7 @@
   (name #:of (current-player)))
 
 (define (find-player player-name)
-  (define players (thing-named "Players" #:in the-game))
+  (define players (thing-named "Players" #:in (the-game)))
   (findf (has-name? player-name)
          (value #:of players)))
 
@@ -159,10 +156,10 @@
   (deplete-mana nexus mana))
 
 (define (nexus #:color col #:mana mana)
-    (thing #:name "Nexus"
-           #:type 'Nexus 
-           'color col
-           'mana mana))
+  (thing #:name "Nexus"
+         #:type 'Nexus 
+         'color col
+         'mana mana))
 
 ;;; SEVAROG
 (define (sevarog #:mana mana)
@@ -244,7 +241,7 @@
   (< (what-is 'mana #:of t) 0))
 
 (define graveyard (thing #:name "Graveyard"
-                   'value '()))
+                         'value '()))
 
 (define reaper
   (thing #:name "Reaper"
@@ -254,7 +251,7 @@
                              (filter is-dead?
                                      (all-things-in-play)))
                            (map move-to-graveyard dead-things))
-                )))
+                        )))
 
 ;; INVENTORY
 (define (inventory #:of p)
@@ -274,14 +271,7 @@
 
 
 
-(define the-game
- (put-in (new-game)
-         reaper
-         state-checker
-         graveyard
-         players
-         watchers
-         ))
+
 
 (define (mana-of t)
   (what-is 'mana #:of t))
@@ -308,14 +298,21 @@
    sevarog
    parasite
    disenchantment
+
+   put-on-battlefield
+   chessboard-battlefield
    )
   
   (define (cast-spell t)
     (add-to-inventory (current-player-name) t)
     (deplete-nexus-mana (current-player-name) (what-is 'mana #:of t)))
   
-  (define (start-game-with-players . names)
-    (redescribe! players 'value (map name->player names)))
+  (define (start-game-with-players #:map [the-map chessboard-battlefield] . names)
+    (redescribe! players 'value (map name->player names))
+
+    (the-game (put-in (the-game)
+                      the-map
+                      players)))
   
   (define (place-nexus #:mana mana #:color color)
     (when (> mana 100) ;This is where you would enforce nexus properties
@@ -331,13 +328,29 @@
 ;(run 'reap #:of reaper)
 
 ;TODO: Reeep things whose target is dead...
-  ; Or any children?
+; Or any children?
 
-#;
-(module+ main
-  (require nomic/gml/server
-           racket/sandbox
-           web-server/http/bindings)
+(provide serve-game)
+
+(require nomic/gml/server
+         racket/sandbox
+         web-server/http/bindings)
+(require nomic/new-twitch)
+(require nomic/gml/frontend)
+
+(define (serve-game [post-process-twitch (thunk* (error "What was that!?"))]
+                    [twitch-language 'nomic/new-twitch])
+  
+  (the-game
+    (put-in (the-game)
+            ;reaper
+            ;state-checker
+            ;graveyard
+            ;players
+            watchers
+
+            ;chessboard-battlefield
+            ))
 
   (on-twitch-spell
    (lambda (r)
@@ -363,19 +376,18 @@
                     (hash-ref thing-description 'key)
                     (hash-ref thing-description 'value))]
       [else
-       (error "What was that???")]))
+       (post-process-twitch thing-description)]))
 
   (define (twitch-eval twitch-id spell-string)
     (safe-evaluator
      `(with-twitch-id ,twitch-id
         ,(read (open-input-string spell-string)))))
-
-  (require nomic/new-twitch)
+  
   (define safe-evaluator
     (call-with-trusted-sandbox-configuration
      (lambda ()
        (make-evaluator
-        'nomic/new-twitch
+        twitch-language
         ))))
 
   (define (extract-spell r)
@@ -388,11 +400,11 @@
      'twitch-id
      (request-bindings r)))
   
-  (thread (thunk (serve-model the-game)))
+  (thread (thunk (serve-model (the-game))))
 
 
-  (require nomic/gml/frontend)
-  (thread (thunk (serve-renderer the-game))))
+ 
+  (thread (thunk (serve-renderer (the-game)))))
 
 
 

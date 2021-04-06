@@ -1,6 +1,0 @@
-#lang racket
-
-(provide watch)
-
-(define (watch)
-  (displayln "YOU ARE WATCHING"))
