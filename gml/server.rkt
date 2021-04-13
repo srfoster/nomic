@@ -132,7 +132,6 @@
 (define (serve-model g)
   (set! the-game g)
   (serve/servlet (lambda(r)
-                   (displayln r)
                    (do-routing r))
                  #:port 8081
                  #:servlet-regexp #rx""

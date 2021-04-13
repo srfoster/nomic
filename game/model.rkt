@@ -387,8 +387,7 @@
     (call-with-trusted-sandbox-configuration
      (lambda ()
        (make-evaluator
-        twitch-language
-        ))))
+        twitch-language))))
 
   (define (extract-spell r)
     (extract-binding/single
