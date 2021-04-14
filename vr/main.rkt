@@ -153,8 +153,10 @@
    (tag "kettle" (find-by-name-in-radius "PickupKettle" 1000)))
   (unreal-eval-js
    (tag "cup" (find-by-name-in-radius "PickupCup" 1000)))
+  ; kinda funky? ground?
   (unreal-eval-js
    (tag "TB" (find-by-name-in-radius "MotionControllerPawn" 1000)))
+  ; kinda funky? ground?
   (unreal-eval-js
    (tag "door" (find-by-name-in-radius "Door" 1000)))
   (unreal-eval-js

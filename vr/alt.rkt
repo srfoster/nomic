@@ -74,34 +74,10 @@ For the YT trailer video:
          nomic/vr/util
          nomic/game/model
 
-         hierarchy
-         )
+         hierarchy)
 
 
 
-(define (find-by-name-in-radius name radius)
-  @unreal-value{
-     let actors = KismetSystemLibrary.SphereOverlapActors(GWorld, {X:@(current-x), Y:@(current-z), Z:@(current-y)}, @radius).OutActors
-
-     for(let i = 0; i < actors.length; i++){
-       let current = actors[i];
-
-       if(current.toString().match("@|name|_C")){
-         return current;
-       }
-     }
-
-     return false;
- })
-
-(define (move-to thing-1 thing-2)
-  @unreal-value{
-    var thing1 = @thing-1;
-    var thing2 = @thing-2;
-    thing1.SetActorLocation(thing2.GetActorLocation());
-
-    return thing1;
- })
 
 (define (drift
          #:force [f 1000]
@@ -120,9 +96,6 @@ For the YT trailer video:
  var vect2 = {X: (vect.X / magnitude) * @f,
               Y: (vect.Y / magnitude) * @f,
               Z: (vect.Z / magnitude) * @f};
- //thing1.AddForce(vect2);
-
- console.log(thing1.StaticMeshComponent.AddImpulse);
  
  thing1.StaticMeshComponent.AddImpulse(vect2);
 
@@ -157,12 +130,10 @@ For the YT trailer video:
   @unreal-value{
     var x = @x;
 
-    console.log(x);
     var cs = x.GetComponentsByClass(StaticMeshComponent);
-    console.log(cs);
 
-    for(var i = 0; i < cs; i++){
-      cs[i].SetEnableGravity(false);
+    for(var i = 0; i < cs.length; i++){
+      cs[i].SetEnableGravity(false); 
     }
             
     return x;
@@ -234,15 +205,33 @@ For the YT trailer video:
 
   var thing = new Thing_C(GWorld,{X:@(current-x), Y:@(current-z), Z:@(current-y)});
   
-  var child = @(at [0 75 0] (to-summon));
+  var child = @(to-summon);
+
+  @(move-to @unreal-js{child}
+            @unreal-js{thing})
+
+  /*
   if(child.StaticMeshComponent){
     child.StaticMeshComponent.SetSimulatePhysics(false);
     child.StaticMeshComponent.SetGenerateOverlapEvents(false);
+  }
+  */
+
+  /*
+  var cs = child.GetComponentsByClass(StaticMeshComponent);
+
+  for(var i = 0; i < cs.length; i++){
+   console.log(cs[i]);                                 
+   cs[i].SetSimulatePhysics(false);
+   cs[i].SetGenerateOverlapEvents(false);
   }
     
   @(parentify
     @unreal-js{thing}
     @unreal-js{child});
+                      */
+
+  thing.AddChild(child);
                    
   return thing;
   })()
@@ -251,6 +240,21 @@ For the YT trailer video:
 
 
 (provide main)
+
+(define (main)
+  (displayln "*******MAIN******")
+
+  (unreal-eval-js
+   @unreal-value{
+    var thing = @(find-with-tag "lindsey");
+    thing.AddChild(@(find-by-name-in-radius "PickupBread" 1000));
+
+    return thing;
+ })
+
+  (displayln "*******END MAIN******"))
+
+#;
 (define (main)
   (displayln "Main!")
 
@@ -322,14 +326,11 @@ Coding. Games. Education. Science. Magic. Memes. Media. SciFi. Fantasy. Lisp. [T
 Coding.
 Meta coding.
 |#
-
-
-
-
-  )
-
+)
 
 (require taggable)
+
+
 
 (module+ main
   (serve-game
@@ -338,35 +339,25 @@ Meta coding.
 
 
   @summon-off-camera[(with-tag "lindsey"
-                       
-                       (thunk (disable-gravity
-                        apple)))]
-  
+                       (thunk ;Why????
+                        (spawn
+                         (class-from-exported "PickupThing")))
+                       )]
 
-#;
-  @summon-off-camera[(with-tag "lindsey"
-                       
-                       (vr-controlled
-                        ;apple
-                        ;dark-pawn
-                        ;lindsey-card
-                        dark-crystal
-                        #;
-                        (thunk
-                         (browser-card
-                          "https://youtu.be/AnJiAByUBuU"))
-                      
-                        ))]
+  (unreal-eval-js
+   (tag "bread"
+        (find-by-name-in-radius
+         "PickupBread" 1000)))
 
   #;
-  (try
-   (unreal-eval-js
-    (drift (find-with-tag "lindsey")
-           (find-by-name-in-radius "PickupBread" 1000))))
-
-
+  (unreal-eval-js
+   (drift (find-with-tag "lindsey")
+          (find-with-tag "bread")
+          #:force 10000))
   
   
   (dump-logs)
+
+
   )
 

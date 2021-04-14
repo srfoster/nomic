@@ -1,6 +1,18 @@
 #lang at-exp codespells
 
-(provide find-by-name-in-radius held-thing change-text)
+(provide find-by-name-in-radius
+         move-to
+         held-thing
+         change-text)
+
+(define (move-to thing-1 thing-2)
+  @unreal-value{
+    var thing1 = @thing-1;
+    var thing2 = @thing-2;
+    thing1.SetActorLocation(thing2.GetActorLocation());
+
+    return thing1;
+ })
 
 (define (find-by-name-in-radius name radius)
   @unreal-value{
